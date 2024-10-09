@@ -94,7 +94,7 @@ def save_plot_experiment(out_dir, result_dict, tsp_dict):
     # Plot nodes with colors based on costs
     ax.scatter(tsp_df.x, tsp_df.y, c=tsp_df.cost, cmap=cmap, norm=norm, s=40, zorder=10)
      
-
+    ax.set_axis_off()
     # Add color bar
     cbar = fig.colorbar(ScalarMappable(norm=norm, cmap=cmap), ax=ax)
     cbar.set_label('Node Costs')
@@ -103,6 +103,8 @@ def save_plot_experiment(out_dir, result_dict, tsp_dict):
     for key, val in tsp_dict.items():
         ax.text(val['x'], val['y'], key, fontsize=3, ha='center', zorder=11)
 
+    ax.set_title(result_dict['experiment_name'])
+    
     filename = out_dir / f'{result_dict['experiment_name']}.png'
     plt.savefig(filename, dpi=300, bbox_inches='tight')
 
@@ -127,11 +129,9 @@ if __name__ =="__main__":
     files_tspb = glob.glob(pattern2)
     all_experiments_filenames = files_tspa + files_tspb
     
-    # Generate a timestamp string
-    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')  # Format: YYYYMMDD_HHMMSS
 
     # Define the directory name
-    plots_dir = script_dir / args.experiment_dir / "plots" / timestamp 
+    plots_dir = script_dir / args.experiment_dir / "plots"
     if not os.path.exists(plots_dir):
         os.makedirs(plots_dir)    
     
