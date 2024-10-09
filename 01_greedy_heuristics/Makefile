@@ -1,5 +1,5 @@
 # Compiler and flags
-CC = gcc
+CC = gcc-14
 CFLAGS = -Wall -Wextra -std=c11 -O2 -fopenmp
 
 # Directories
