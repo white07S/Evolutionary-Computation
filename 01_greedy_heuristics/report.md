@@ -17,10 +17,35 @@ instances defined only by distance matrices.
 ```
 pseudocode goes here
 ```
-
 <p float="left">
-  <img src="01_greedy_heuristics/plots/20241009_213327/RandomSearch_TSPA.png" width="400" />
-  <img src="01_greedy_heuristics/plots/20241009_213327/RandomSearch_TSPB.png" width="400" /> 
+  <img src="/01_greedy_heuristics/plots/RandomSearch_TSPA.png" width="400" />
+  <img src="/01_greedy_heuristics/plots/RandomSearch_TSPB.png" width="400" /> 
 </p>
 
 
+### Nearest neighbor considering adding the node only at the end of the current path
+```
+pseudocode goes here
+```
+<p float="left">
+  <img src="/01_greedy_heuristics/plots/NearestNeighboursEndInsert_TSPA.png" width="400" />
+  <img src="/01_greedy_heuristics/plots/NearestNeighboursEndInsert_TSPB.png" width="400" /> 
+</p>
+
+### Nearest neighbor considering adding the node at all possible position
+```
+pseudocode goes here
+```
+<p float="left">
+  <img src="/01_greedy_heuristics/plots/NearestNeighboursAnywhereInsert_TSPA.png" width="400" />
+  <img src="/01_greedy_heuristics/plots/NearestNeighboursAnywhereInsert_TSPB.png" width="400" /> 
+</p>
+
+### Greedy cycle
+```
+pseudocode goes here
+```
+<p float="left">
+  <img src="/01_greedy_heuristics/plots/GreedyCycle_TSPA.png" width="400" />
+  <img src="/01_greedy_heuristics/plots/GreedyCycle_TSPB.png" width="400" /> 
+</p>
