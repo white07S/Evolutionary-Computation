@@ -152,12 +152,18 @@ def generate_report(all_results, script_dir, experiment_name):
     
     #  writ the results and the plots to the report file
     with open(filename, 'w') as out_md:
-        out_md.write(df.reset_index().to_markdown(index=False))
+
         
-        text = '\n## Visualization\n'
+        text = '\n## Algorithms\n'
         for algorithm_name in ALGORITHMS_ORDERED:
             text = text + \
 f"""### {algorithm_name}
+
+**pesudocode**
+
+```
+Code goes here
+```
             
 <p float="left">
 <img src="/{experiment_name}/plots/{algorithm_name}_TSPA.png" width="400" />
@@ -167,13 +173,13 @@ f"""### {algorithm_name}
 """
             for dataset in ['TSPA', 'TSPB']:
                 solution_str = str(shift_solution(all_results[f'{algorithm_name}_{dataset}']['best_solution']))
-                text = text + f'Best solution for {dataset}:\n' + solution_str + '\n'
+                text = text + f'**Best solution for {dataset}:**\n\n' + solution_str + '\n\n'
         
         out_md.write(text)
 
 
-
-        
+        out_md.write('\n## Results\n')
+        out_md.write(df.reset_index().to_markdown(index=False))
     
 
 if __name__ =="__main__":
