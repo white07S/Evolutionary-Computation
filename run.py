@@ -9,6 +9,8 @@ import matplotlib.colors as mcolors
 from matplotlib.cm import ScalarMappable
 from datetime import datetime
 
+ALGORITHMS_ORDERED = ['RandomSearch', 'NearestNeighboursEndInsert', 'NearestNeighboursAnywhereInsert', 'GreedyCycle']
+
 script_dir = Path(__file__).parent
 
 def read_instance(experiment_dir, data_filename) -> dict:
@@ -30,6 +32,15 @@ def read_algorithm_result(filename) -> dict:
         result_dict['best_solution'] = f.readline().split(':')[-1].split()
         result_dict['best_solution'] = [int(x) for x in result_dict['best_solution']]
     return result_dict
+
+
+def shift_solution(solution):
+    n = len(solution)
+    new_solution = [0] * n
+    min_id = solution.index(min(solution))
+    for i in range(n):
+        new_solution[i] = solution[(i+min_id)%n]
+    return new_solution
 
 
 def calculate_distance(x1, y1, x2, y2):
@@ -111,9 +122,59 @@ def save_plot_experiment(out_dir, result_dict, tsp_dict):
             
         
     
+def generate_report(all_results, script_dir, experiment_name):
+    # get unique algorithm names
+    algorithm_names = list(set([result_dict['experiment_name'].replace('_TSPA', '')
+                        .replace('_TSPB', '') for result_dict in all_results.values()]))
     
-        
+    table_data = {}
+    
+    for algorithm_name in ALGORITHMS_ORDERED:
+        table_data[algorithm_name] = {}
+        for dataset in ['TSPA', 'TSPB']:
+            result_dict = all_results[f'{algorithm_name}_{dataset}']
+            table_data[algorithm_name][dataset] = {
+                    'worst': result_dict['worst_cost'],
+                    'avg': result_dict['average_cost'],
+                    'best': result_dict['best_cost']
+            }
 
+    df = pd.DataFrame.from_dict({(alg, dataset): scores 
+                             for alg, dataset_scores in table_data.items() 
+                             for dataset, scores in dataset_scores.items()},
+                             orient='index')
+    df.index.names = ['Algorithm', 'Dataset']
+    
+ 
+    
+    timestamp = datetime.now().strftime('%m_%d_%H_%M_%S')
+    filename = script_dir /experiment_name / f'{timestamp}_report.md'
+    
+    #  writ the results and the plots to the report file
+    with open(filename, 'w') as out_md:
+        out_md.write(df.reset_index().to_markdown(index=False))
+        
+        text = '\n## Visualization\n'
+        for algorithm_name in ALGORITHMS_ORDERED:
+            text = text + \
+f"""### {algorithm_name}
+            
+<p float="left">
+<img src="/{experiment_name}/plots/{algorithm_name}_TSPA.png" width="400" />
+<img src="/{experiment_name}/plots/{algorithm_name}_TSPB.png" width="400" /> 
+</p>
+
+"""
+            for dataset in ['TSPA', 'TSPB']:
+                solution_str = str(shift_solution(all_results[f'{algorithm_name}_{dataset}']['best_solution']))
+                text = text + f'Best solution for {dataset}:\n' + solution_str + '\n'
+        
+        out_md.write(text)
+
+
+
+        
+    
 
 if __name__ =="__main__":
     parser = argparse.ArgumentParser(description='This script reads the result of a specified experiment, verifies the scores, and generates the visualisations')
@@ -135,15 +196,20 @@ if __name__ =="__main__":
     if not os.path.exists(plots_dir):
         os.makedirs(plots_dir)    
     
+    all_results = {}
     for experiment_filename in all_experiments_filenames:
         result_dict: dict = read_algorithm_result(experiment_filename)
+        all_results[result_dict['experiment_name']] = result_dict
         tsp_dict = tspa_dict if "TSPA" in experiment_filename else tspb_dict
         
         validate_result(tsp_dict, result_dict)
         
         save_plot_experiment(plots_dir, result_dict, tsp_dict)
         
-        
+    
+    # experiment_dir = script_dir / args.experiment_dir
+    generate_report(all_results, script_dir, args.experiment_dir)
+   
         
     
         
