@@ -166,8 +166,8 @@ Code goes here
 ```
             
 <p float="left">
-<img src="/{experiment_name}/plots/{algorithm_name}_TSPA.png" width="400" />
-<img src="/{experiment_name}/plots/{algorithm_name}_TSPB.png" width="400" /> 
+<img src="plots/{algorithm_name}_TSPA.png" width="300" />
+<img src="plots/{algorithm_name}_TSPB.png" width="300" /> 
 </p>
 
 """
