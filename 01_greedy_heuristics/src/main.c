@@ -10,13 +10,24 @@ int main(int argc, char* argv[]) {
     srand((unsigned int)time(NULL));
 
     // Create algorithm instances
-    Algo* algorithms[4];
+    int num_algorithms = 6;
+    Algo* algorithms[6];
     algorithms[0] = (Algo*)create_RandomSearch();
     algorithms[1] = (Algo*)create_NearestNeighboursEndInsert();
     algorithms[2] = (Algo*)create_NearestNeighboursAnywhereInsert();
     algorithms[3] = (Algo*)create_GreedyCycle();
+    algorithms[4] = (Algo*)create_Greedy2Regret();
+    algorithms[5] = (Algo*)create_Greedy2RegretWeighted();
 
-    // List of files to process
+    // Check if any algorithm failed to be created
+    for(int a = 0; a < num_algorithms; a++) {
+        if(algorithms[a] == NULL) {
+            fprintf(stderr, "Error: Failed to create algorithm %d\n", a);
+            // Optionally, handle error
+        }
+    }
+
+    // List of files to process (only TSPA and TSPB)
     const char* files[] = {"data/TSPA.csv", "data/TSPB.csv"};
     int num_files = sizeof(files) / sizeof(files[0]);
 
@@ -24,7 +35,7 @@ int main(int argc, char* argv[]) {
     int num_solutions = 200;
 
     // Loop over algorithms and files
-    for(int a = 0; a < 4; a++) {
+    for(int a = 0; a < num_algorithms; a++) {
         for(int f = 0; f < num_files; f++) {
             // Read data from file
             int num_nodes = 0;
@@ -96,7 +107,7 @@ int main(int argc, char* argv[]) {
     }
 
     // Free algorithm instances
-    for(int i = 0; i < 4; i++) {
+    for(int i = 0; i < num_algorithms; i++) {
         free(algorithms[i]);
     }
 

@@ -47,6 +47,22 @@ typedef struct
 
 GreedyCycle *create_GreedyCycle();
 
+// Greedy2Regret Algorithm
+typedef struct
+{
+    Algo base;
+} Greedy2Regret;
+
+Greedy2Regret *create_Greedy2Regret();
+
+// Greedy2RegretWeighted Algorithm
+typedef struct
+{
+    Algo base;
+} Greedy2RegretWeighted;
+
+Greedy2RegretWeighted *create_Greedy2RegretWeighted();
+
 // Function to free a Result structure
 void free_Result(Result res);
 

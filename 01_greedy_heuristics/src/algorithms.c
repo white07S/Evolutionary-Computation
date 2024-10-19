@@ -8,6 +8,8 @@ static Result RandomSearch_solve(Algo *algo, const int **distances, int num_node
 static Result NearestNeighboursEndInsert_solve(Algo *algo, const int **distances, int num_nodes, const int *costs, int num_solutions);
 static Result NearestNeighboursAnywhereInsert_solve(Algo *algo, const int **distances, int num_nodes, const int *costs, int num_solutions);
 static Result GreedyCycle_solve(Algo *algo, const int **distances, int num_nodes, const int *costs, int num_solutions);
+static Result Greedy2Regret_solve(Algo *algo, const int **distances, int num_nodes, const int *costs, int num_solutions);
+static Result Greedy2RegretWeighted_solve(Algo *algo, const int **distances, int num_nodes, const int *costs, int num_solutions);
 
 // ------------------ RandomSearch Algorithm ------------------
 
@@ -229,6 +231,7 @@ static Result NearestNeighboursEndInsert_solve(Algo *algo, const int **distances
                 fprintf(stderr, "Error: The generated solution is not valid\n");
             }
 
+            // Calculate cost
             int current_cost = calculate_cost(current_solution, count, distances, costs);
             totalCost += current_cost;
 
@@ -636,6 +639,477 @@ static Result GreedyCycle_solve(Algo *algo, const int **distances, int num_nodes
         }
     }
 
+    double averageCost = (total_iterations > 0) ? ((double)totalCost / total_iterations) : 0.0;
+
+    Result res;
+    res.bestCost = bestCost;
+    res.worstCost = worstCost;
+    res.averageCost = averageCost;
+    res.bestSolution = bestSolution;
+    res.bestSolutionSize = bestSolutionSize;
+    res.worstSolution = worstSolution;
+    res.worstSolutionSize = worstSolutionSize;
+
+    return res;
+}
+
+// ------------------ Greedy2Regret Algorithm ------------------
+
+Greedy2Regret *create_Greedy2Regret()
+{
+    Greedy2Regret *gr = (Greedy2Regret *)malloc(sizeof(Greedy2Regret));
+    if (!gr)
+    {
+        fprintf(stderr, "Error: Memory allocation failed for Greedy2Regret\n");
+        return NULL;
+    }
+    gr->base.name = "Greedy2Regret";
+    gr->base.solve = Greedy2Regret_solve;
+    return gr;
+}
+
+static Result Greedy2Regret_solve(Algo *algo, const int **distances, int num_nodes, const int *costs, int num_solutions)
+{
+    int solution_size = (num_nodes + 1) / 2;
+
+    int total_iterations = num_nodes * num_solutions;
+
+    int bestCost = INT_MAX;
+    int worstCost = INT_MIN;
+    long long totalCost = 0;
+
+    int *bestSolution = NULL;
+    int bestSolutionSize = 0;
+    int *worstSolution = NULL;
+    int worstSolutionSize = 0;
+
+    // For each node as starting point
+    for (int start_node = 0; start_node < num_nodes; start_node++)
+    {
+        // Generate num_solutions starting from this node
+        for (int s = 0; s < num_solutions; s++)
+        {
+            int *current_solution = (int *)malloc((solution_size + 1) * sizeof(int)); // +1 for safe insertion
+            if (!current_solution)
+            {
+                fprintf(stderr, "Error: Memory allocation failed in Greedy2Regret_solve\n");
+                Result res = {INT_MAX, INT_MIN, 0.0, NULL, 0, NULL, 0};
+                return res;
+            }
+
+            int current_size = 0;
+            char *visited = (char *)calloc(num_nodes, sizeof(char));
+            if (!visited)
+            {
+                fprintf(stderr, "Error: Memory allocation failed in Greedy2Regret_solve (visited)\n");
+                free(current_solution);
+                Result res = {INT_MAX, INT_MIN, 0.0, NULL, 0, NULL, 0};
+                return res;
+            }
+
+            // Start with start_node
+            current_solution[current_size++] = start_node;
+            visited[start_node] = 1;
+
+            // Find the farthest node to start forming a cycle
+            int max_distance = -1;
+            int farthest_nodes[num_nodes];
+            int num_farthest = 0;
+            for (int j = 0; j < num_nodes; j++)
+            {
+                if (!visited[j])
+                {
+                    int distance = distances[start_node][j];
+                    if (distance > max_distance)
+                    {
+                        max_distance = distance;
+                        num_farthest = 0;
+                        farthest_nodes[num_farthest++] = j;
+                    }
+                    else if (distance == max_distance)
+                    {
+                        farthest_nodes[num_farthest++] = j;
+                    }
+                }
+            }
+
+            if (num_farthest == 0)
+            {
+                free(visited);
+                free(current_solution);
+                continue;
+            }
+
+            // Randomly select one of the farthest nodes
+            int rand_index = rand() % num_farthest;
+            int farthest_node = farthest_nodes[rand_index];
+
+            current_solution[current_size++] = farthest_node;
+            visited[farthest_node] = 1;
+
+            // Build the solution
+            while (current_size < solution_size)
+            {
+                int max_regret = INT_MIN;
+                int candidate_nodes[num_nodes];
+                int candidate_positions[num_nodes];
+                int num_candidates = 0;
+
+                // Iterate over all unvisited nodes
+                for (int k = 0; k < num_nodes; k++)
+                {
+                    if (visited[k])
+                        continue;
+
+                    // For node k, compute insertion costs at all possible positions
+                    int smallest_cost = INT_MAX;
+                    int second_smallest_cost = INT_MAX;
+                    int best_pos = -1;
+
+                    for (int j = 0; j < current_size; j++)
+                    {
+                        int prev = current_solution[j];
+                        int next = current_solution[(j + 1) % current_size];
+                        int insertion_cost = distances[prev][k] + distances[k][next] - distances[prev][next] + costs[k];
+
+                        if (insertion_cost < smallest_cost)
+                        {
+                            second_smallest_cost = smallest_cost;
+                            smallest_cost = insertion_cost;
+                            best_pos = (j + 1) % (current_size + 1);
+                        }
+                        else if (insertion_cost < second_smallest_cost)
+                        {
+                            second_smallest_cost = insertion_cost;
+                        }
+                    }
+
+                    // Handle case where only one insertion position is possible
+                    if (second_smallest_cost == INT_MAX)
+                    {
+                        second_smallest_cost = smallest_cost;
+                    }
+
+                    // Compute regret
+                    int regret = second_smallest_cost - smallest_cost;
+
+                    if (regret > max_regret)
+                    {
+                        max_regret = regret;
+                        num_candidates = 0;
+                        candidate_nodes[num_candidates] = k;
+                        candidate_positions[num_candidates++] = best_pos;
+                    }
+                    else if (regret == max_regret)
+                    {
+                        candidate_nodes[num_candidates] = k;
+                        candidate_positions[num_candidates++] = best_pos;
+                    }
+                }
+
+                if (num_candidates == 0)
+                {
+                    break;
+                }
+
+                // Randomly select one of the candidates
+                int rand_index = rand() % num_candidates;
+                int insert_node = candidate_nodes[rand_index];
+                int insert_index = candidate_positions[rand_index];
+
+                // Insert insert_node at insert_index in current_solution
+                for (int m = current_size; m > insert_index; m--)
+                {
+                    current_solution[m] = current_solution[m - 1];
+                }
+                current_solution[insert_index] = insert_node;
+                current_size++;
+                visited[insert_node] = 1;
+            }
+
+            // Check if valid solution
+            if (!is_valid_solution(current_solution, current_size, num_nodes))
+            {
+                fprintf(stderr, "Error: The generated solution is not valid\n");
+            }
+
+            // Calculate cost
+            int current_cost = calculate_cost(current_solution, current_size, distances, costs);
+            totalCost += current_cost;
+
+            // Update best
+            if (current_cost < bestCost)
+            {
+                bestCost = current_cost;
+                if (bestSolution)
+                    free(bestSolution);
+                bestSolution = (int *)malloc(current_size * sizeof(int));
+                if (bestSolution)
+                {
+                    memcpy(bestSolution, current_solution, current_size * sizeof(int));
+                    bestSolutionSize = current_size;
+                }
+            }
+
+            // Update worst
+            if (current_cost > worstCost)
+            {
+                worstCost = current_cost;
+                if (worstSolution)
+                    free(worstSolution);
+                worstSolution = (int *)malloc(current_size * sizeof(int));
+                if (worstSolution)
+                {
+                    memcpy(worstSolution, current_solution, current_size * sizeof(int));
+                    worstSolutionSize = current_size;
+                }
+            }
+
+            free(visited);
+            free(current_solution);
+        }
+    }
+
+    // Calculate average cost
+    double averageCost = (total_iterations > 0) ? ((double)totalCost / total_iterations) : 0.0;
+
+    Result res;
+    res.bestCost = bestCost;
+    res.worstCost = worstCost;
+    res.averageCost = averageCost;
+    res.bestSolution = bestSolution;
+    res.bestSolutionSize = bestSolutionSize;
+    res.worstSolution = worstSolution;
+    res.worstSolutionSize = worstSolutionSize;
+
+    return res;
+}
+
+
+// ------------------ Greedy2RegretWeighted Algorithm ------------------
+
+Greedy2RegretWeighted *create_Greedy2RegretWeighted()
+{
+    Greedy2RegretWeighted *grw = (Greedy2RegretWeighted *)malloc(sizeof(Greedy2RegretWeighted));
+    if (!grw)
+    {
+        fprintf(stderr, "Error: Memory allocation failed for Greedy2RegretWeighted\n");
+        return NULL;
+    }
+    grw->base.name = "Greedy2RegretWeighted";
+    grw->base.solve = Greedy2RegretWeighted_solve;
+    return grw;
+}
+
+static Result Greedy2RegretWeighted_solve(Algo *algo, const int **distances, int num_nodes, const int *costs, int num_solutions)
+{
+    int solution_size = (num_nodes + 1) / 2;
+
+    int total_iterations = num_nodes * num_solutions;
+
+    int bestCost = INT_MAX;
+    int worstCost = INT_MIN;
+    long long totalCost = 0;
+
+    int *bestSolution = NULL;
+    int bestSolutionSize = 0;
+    int *worstSolution = NULL;
+    int worstSolutionSize = 0;
+
+    double weight1 = 1.0; // weight for regret
+    double weight2 = 1.0; // weight for cost increase
+
+    // For each node as starting point
+    for (int start_node = 0; start_node < num_nodes; start_node++)
+    {
+        // Generate num_solutions starting from this node
+        for (int s = 0; s < num_solutions; s++)
+        {
+            int *current_solution = (int *)malloc((solution_size + 1) * sizeof(int)); // +1 for safe insertion
+            if (!current_solution)
+            {
+                fprintf(stderr, "Error: Memory allocation failed in Greedy2RegretWeighted_solve\n");
+                Result res = {INT_MAX, INT_MIN, 0.0, NULL, 0, NULL, 0};
+                return res;
+            }
+
+            int current_size = 0;
+            char *visited = (char *)calloc(num_nodes, sizeof(char));
+            if (!visited)
+            {
+                fprintf(stderr, "Error: Memory allocation failed in Greedy2RegretWeighted_solve (visited)\n");
+                free(current_solution);
+                Result res = {INT_MAX, INT_MIN, 0.0, NULL, 0, NULL, 0};
+                return res;
+            }
+
+            // Start with start_node
+            current_solution[current_size++] = start_node;
+            visited[start_node] = 1;
+
+            // Find the farthest node to start forming a cycle
+            int max_distance = -1;
+            int farthest_nodes[num_nodes];
+            int num_farthest = 0;
+            for (int j = 0; j < num_nodes; j++)
+            {
+                if (!visited[j])
+                {
+                    int distance = distances[start_node][j];
+                    if (distance > max_distance)
+                    {
+                        max_distance = distance;
+                        num_farthest = 0;
+                        farthest_nodes[num_farthest++] = j;
+                    }
+                    else if (distance == max_distance)
+                    {
+                        farthest_nodes[num_farthest++] = j;
+                    }
+                }
+            }
+
+            if (num_farthest == 0)
+            {
+                free(visited);
+                free(current_solution);
+                continue;
+            }
+
+            // Randomly select one of the farthest nodes
+            int rand_index = rand() % num_farthest;
+            int farthest_node = farthest_nodes[rand_index];
+
+            current_solution[current_size++] = farthest_node;
+            visited[farthest_node] = 1;
+
+            // Build the solution
+            while (current_size < solution_size)
+            {
+                double max_score = -1e9;
+                int candidate_nodes[num_nodes];
+                int candidate_positions[num_nodes];
+                int num_candidates = 0;
+
+                // Iterate over all unvisited nodes
+                for (int k = 0; k < num_nodes; k++)
+                {
+                    if (visited[k])
+                        continue;
+
+                    // For node k, compute insertion costs at all possible positions
+                    int smallest_cost = INT_MAX;
+                    int second_smallest_cost = INT_MAX;
+                    int best_pos = -1;
+
+                    for (int j = 0; j < current_size; j++)
+                    {
+                        int prev = current_solution[j];
+                        int next = current_solution[(j + 1) % current_size];
+                        int insertion_cost = distances[prev][k] + distances[k][next] - distances[prev][next] + costs[k];
+
+                        if (insertion_cost < smallest_cost)
+                        {
+                            second_smallest_cost = smallest_cost;
+                            smallest_cost = insertion_cost;
+                            best_pos = (j + 1) % (current_size + 1);
+                        }
+                        else if (insertion_cost < second_smallest_cost)
+                        {
+                            second_smallest_cost = insertion_cost;
+                        }
+                    }
+
+                    // Handle case where only one insertion position is possible
+                    if (second_smallest_cost == INT_MAX)
+                    {
+                        second_smallest_cost = smallest_cost;
+                    }
+
+                    // Compute regret
+                    int regret = second_smallest_cost - smallest_cost;
+
+                    // Compute score
+                    double score = weight1 * regret - weight2 * smallest_cost;
+
+                    if (score > max_score)
+                    {
+                        max_score = score;
+                        num_candidates = 0;
+                        candidate_nodes[num_candidates] = k;
+                        candidate_positions[num_candidates++] = best_pos;
+                    }
+                    else if (score == max_score)
+                    {
+                        candidate_nodes[num_candidates] = k;
+                        candidate_positions[num_candidates++] = best_pos;
+                    }
+                }
+
+                if (num_candidates == 0)
+                {
+                    break;
+                }
+
+                // Randomly select one of the candidates
+                int rand_index = rand() % num_candidates;
+                int insert_node = candidate_nodes[rand_index];
+                int insert_index = candidate_positions[rand_index];
+
+                // Insert insert_node at insert_index in current_solution
+                for (int m = current_size; m > insert_index; m--)
+                {
+                    current_solution[m] = current_solution[m - 1];
+                }
+                current_solution[insert_index] = insert_node;
+                current_size++;
+                visited[insert_node] = 1;
+            }
+
+            // Check if valid solution
+            if (!is_valid_solution(current_solution, current_size, num_nodes))
+            {
+                fprintf(stderr, "Error: The generated solution is not valid\n");
+            }
+
+            // Calculate cost
+            int current_cost = calculate_cost(current_solution, current_size, distances, costs);
+            totalCost += current_cost;
+
+            // Update best
+            if (current_cost < bestCost)
+            {
+                bestCost = current_cost;
+                if (bestSolution)
+                    free(bestSolution);
+                bestSolution = (int *)malloc(current_size * sizeof(int));
+                if (bestSolution)
+                {
+                    memcpy(bestSolution, current_solution, current_size * sizeof(int));
+                    bestSolutionSize = current_size;
+                }
+            }
+
+            // Update worst
+            if (current_cost > worstCost)
+            {
+                worstCost = current_cost;
+                if (worstSolution)
+                    free(worstSolution);
+                worstSolution = (int *)malloc(current_size * sizeof(int));
+                if (worstSolution)
+                {
+                    memcpy(worstSolution, current_solution, current_size * sizeof(int));
+                    worstSolutionSize = current_size;
+                }
+            }
+
+            free(visited);
+            free(current_solution);
+        }
+    }
+
+    // Calculate average cost
     double averageCost = (total_iterations > 0) ? ((double)totalCost / total_iterations) : 0.0;
 
     Result res;
