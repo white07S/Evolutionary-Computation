@@ -5,6 +5,20 @@
 #include "algorithms.h"
 #include "utils.h"
 
+// Function to calculate elapsed time in milliseconds
+double get_elapsed_time_ms(struct timespec start, struct timespec end) {
+    double start_ms = start.tv_sec * 1000.0 + start.tv_nsec / 1.0e6;
+    double end_ms = end.tv_sec * 1000.0 + end.tv_nsec / 1.0e6;
+    return end_ms - start_ms;
+}
+
+// Function to calculate elapsed time in seconds
+double get_elapsed_time_sec(struct timespec start, struct timespec end) {
+    double start_sec = start.tv_sec + start.tv_nsec / 1.0e9;
+    double end_sec = end.tv_sec + end.tv_nsec / 1.0e9;
+    return end_sec - start_sec;
+}
+
 int main(int argc, char* argv[]) {
     // Initialize random seed
     srand((unsigned int)time(NULL));
@@ -23,7 +37,9 @@ int main(int argc, char* argv[]) {
     for(int a = 0; a < num_algorithms; a++) {
         if(algorithms[a] == NULL) {
             fprintf(stderr, "Error: Failed to create algorithm %d\n", a);
-            // Optionally, handle error
+            // Optionally, handle error (e.g., exit or skip)
+            // For this example, we'll exit
+            exit(EXIT_FAILURE);
         }
     }
 
@@ -32,7 +48,7 @@ int main(int argc, char* argv[]) {
     int num_files = sizeof(files) / sizeof(files[0]);
 
     // Number of solutions to generate per starting node
-    int num_solutions = 200;
+    int num_solutions = 1;
 
     // Loop over algorithms and files
     for(int a = 0; a < num_algorithms; a++) {
@@ -69,8 +85,25 @@ int main(int argc, char* argv[]) {
             printf("# Algorithm: %s\n", algorithms[a]->name);
             printf("## File: %s\n", files[f]);
 
+            // Start timing before the solve function
+            struct timespec start_time, end_time;
+            if(clock_gettime(CLOCK_MONOTONIC, &start_time) != 0) {
+                perror("clock_gettime");
+                // Handle error, possibly continue without timing
+            }
+
             // Solve using the current algorithm
             Result res = algorithms[a]->solve(algorithms[a], (const int**)distances, num_nodes, costs, num_solutions);
+
+            // End timing after the solve function
+            if(clock_gettime(CLOCK_MONOTONIC, &end_time) != 0) {
+                perror("clock_gettime");
+                // Handle error, possibly set elapsed_time to -1
+            }
+
+            // Calculate elapsed time in milliseconds and seconds
+            double elapsed_ms = get_elapsed_time_ms(start_time, end_time);
+            double elapsed_sec = get_elapsed_time_sec(start_time, end_time);
 
             // Print and write results
             print_Result(res, (const int**)distances, costs);
@@ -96,6 +129,8 @@ int main(int argc, char* argv[]) {
 
             snprintf(result_filename, sizeof(result_filename), "%s_%s_result.txt", algorithms[a]->name, base_name);
             write_Result_to_file(res, result_filename, (const int**)distances, costs);
+            printf("Time taken by %s on %s: %.3f ms (%.3f seconds)\n", 
+                   algorithms[a]->name, files[f], elapsed_ms, elapsed_sec);
             printf("----------------------------------------\n");
 
             // Free allocated memory for this file
