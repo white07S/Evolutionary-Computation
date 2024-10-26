@@ -104,7 +104,7 @@ static Result LocalSearch_solve(Algo *algo, const int **distances, int num_nodes
         }
         else if (ls->starting_solution_type == 1)
         {
-            // Greedy heuristic starting solution (Greedy 2-Regret)
+            // Greedy heuristic starting solution (Weighted Greedy 2-Regret)
             int start_node = rand() % num_nodes;
             generate_Greedy2Regret_solution(start_node, distances, num_nodes, costs, solution_size, current_solution);
         }
@@ -515,8 +515,13 @@ static void shuffle_moves(Move* moves, int n)
 }
 
 // Function to generate a single Greedy 2-Regret solution starting from a given node
+// This version uses weights for regret and cost increase
 static void generate_Greedy2Regret_solution(int start_node, const int **distances, int num_nodes, const int *costs, int solution_size, int *solution)
 {
+    // Set default weights
+    double weight1 = 0.6; // Weight for regret
+    double weight2 = 0.4; // Weight for cost increase
+
     int current_size = 0;
     char *visited = (char *)calloc(num_nodes, sizeof(char));
     if (!visited)
@@ -559,7 +564,7 @@ static void generate_Greedy2Regret_solution(int start_node, const int **distance
     // Build the solution
     while (current_size < solution_size)
     {
-        int max_regret = INT_MIN;
+        double max_score = -1e9;
         int candidate_node = -1;
         int candidate_position = -1;
 
@@ -601,9 +606,12 @@ static void generate_Greedy2Regret_solution(int start_node, const int **distance
             // Compute regret
             int regret = second_smallest_cost - smallest_cost;
 
-            if (regret > max_regret)
+            // Compute score using weights
+            double score = weight1 * regret - weight2 * smallest_cost;
+
+            if (score > max_score)
             {
-                max_regret = regret;
+                max_score = score;
                 candidate_node = k;
                 candidate_position = best_pos;
             }
