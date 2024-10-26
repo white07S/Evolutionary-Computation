@@ -1,6 +1,6 @@
 Best cost: 46713
 Worst cost: 53246
-Average cost: 49803.29
+Average cost: 49802.07
 Best solution total cost breakdown:
  - Path length: 19496
  - Node costs: 27217

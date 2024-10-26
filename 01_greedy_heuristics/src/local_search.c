@@ -61,6 +61,7 @@ static Result LocalSearch_solve(Algo *algo, const int **distances, int num_nodes
     LocalSearch* ls = (LocalSearch*)algo;
     int solution_size = (num_nodes + 1) / 2; // Round up to select 50% of the nodes
 
+    int total_iterations = num_nodes * num_solutions;
     int bestCost = INT_MAX;
     int worstCost = INT_MIN;
     long long totalCost = 0;
@@ -70,288 +71,291 @@ static Result LocalSearch_solve(Algo *algo, const int **distances, int num_nodes
     int* worstSolution = NULL;
     int worstSolutionSize = 0;
 
-    // For num_solutions iterations
-    for (int iter = 0; iter < num_solutions; iter++)
+    // Loop over all starting nodes
+    for (int start_node = 0; start_node < num_nodes; start_node++)
     {
-        // Generate initial solution
-        int* current_solution = (int*)malloc(solution_size * sizeof(int));
-        if (!current_solution)
+        // For num_solutions iterations per starting node
+        for (int iter = 0; iter < num_solutions; iter++)
         {
-            fprintf(stderr, "Error: Memory allocation failed in LocalSearch_solve\n");
-            Result res = {INT_MAX, INT_MIN, 0.0, NULL, 0, NULL, 0};
-            return res;
-        }
-
-        if (ls->starting_solution_type == 0)
-        {
-            // Random starting solution
-            int* all_nodes = (int*)malloc(num_nodes * sizeof(int));
-            if (!all_nodes)
+            // Generate initial solution
+            int* current_solution = (int*)malloc(solution_size * sizeof(int));
+            if (!current_solution)
             {
                 fprintf(stderr, "Error: Memory allocation failed in LocalSearch_solve\n");
-                free(current_solution);
                 Result res = {INT_MAX, INT_MIN, 0.0, NULL, 0, NULL, 0};
                 return res;
             }
-            for (int i = 0; i < num_nodes; i++)
+
+            if (ls->starting_solution_type == 0)
             {
-                all_nodes[i] = i;
-            }
-            // Shuffle and select first solution_size nodes
-            shuffle_array(all_nodes, num_nodes);
-            memcpy(current_solution, all_nodes, solution_size * sizeof(int));
-            free(all_nodes);
-        }
-        else if (ls->starting_solution_type == 1)
-        {
-            // Greedy heuristic starting solution (Weighted Greedy 2-Regret)
-            int start_node = rand() % num_nodes;
-            generate_Greedy2Regret_solution(start_node, distances, num_nodes, costs, solution_size, current_solution);
-        }
-
-        // Perform local search on current_solution
-        int current_cost = calculate_cost(current_solution, solution_size, distances, costs);
-
-        int improvement = 1;
-        while (improvement)
-        {
-            improvement = 0;
-            int best_delta = 0;
-            int move_i = -1, move_j = -1;
-            int move_type = -1; // 0 for intra-route, 1 for inter-route
-
-            if (ls->local_search_type == 0) // Steepest
-            {
-                // Evaluate all possible moves and select the best
-                int delta = 0;
-                if (ls->intra_route_move_type == 0)
-                {
-                    // Two-nodes exchange
-                    for (int i = 0; i < solution_size - 1; i++)
-                    {
-                        for (int j = i + 1; j < solution_size; j++)
-                        {
-                            delta = delta_two_nodes_exchange(current_solution, solution_size, distances, i, j);
-                            if (delta < best_delta)
-                            {
-                                best_delta = delta;
-                                move_i = i;
-                                move_j = j;
-                                move_type = 0;
-                            }
-                        }
-                    }
-                }
-                else if (ls->intra_route_move_type == 1)
-                {
-                    // Two-edges exchange (2-opt)
-                    for (int i = 0; i < solution_size; i++)
-                    {
-                        for (int j = i + 2; j < solution_size + (i > 0 ? 0 : -1); j++)
-                        {
-                            int jj = j % solution_size;
-                            if (i == jj)
-                                continue;
-                            delta = delta_two_edges_exchange(current_solution, solution_size, distances, i, jj);
-                            if (delta < best_delta)
-                            {
-                                best_delta = delta;
-                                move_i = i;
-                                move_j = jj;
-                                move_type = 0;
-                            }
-                        }
-                    }
-                }
-                // Inter-route moves
-                for (int i = 0; i < solution_size; i++)
-                {
-                    for (int node_j = 0; node_j < num_nodes; node_j++)
-                    {
-                        if (!is_in_solution(node_j, current_solution, solution_size))
-                        {
-                            delta = delta_inter_route_exchange(current_solution, solution_size, distances, costs, i, node_j);
-                            if (delta < best_delta)
-                            {
-                                best_delta = delta;
-                                move_i = i;
-                                move_j = node_j;
-                                move_type = 1;
-                            }
-                        }
-                    }
-                }
-
-                if (best_delta < 0)
-                {
-                    // Apply the best move
-                    if (move_type == 0)
-                    {
-                        if (ls->intra_route_move_type == 0)
-                        {
-                            // Two-nodes exchange
-                            swap_nodes(current_solution, move_i, move_j);
-                        }
-                        else if (ls->intra_route_move_type == 1)
-                        {
-                            // Two-edges exchange (2-opt)
-                            reverse_segment(current_solution, (move_i + 1) % solution_size, move_j, solution_size);
-                        }
-                    }
-                    else if (move_type == 1)
-                    {
-                        // Inter-route move
-                        current_solution[move_i] = move_j;
-                    }
-                    current_cost += best_delta;
-                    improvement = 1;
-                }
-            }
-            else if (ls->local_search_type == 1) // Greedy
-            {
-                // Generate list of moves and shuffle
-                int num_moves = 0;
-                Move* moves = NULL;
-                int max_moves = (solution_size * (solution_size - 1)) / 2 + solution_size * (num_nodes - solution_size);
-
-                moves = (Move*)malloc(max_moves * sizeof(Move));
-                if (!moves)
+                // Random starting solution
+                int* all_nodes = (int*)malloc(num_nodes * sizeof(int));
+                if (!all_nodes)
                 {
                     fprintf(stderr, "Error: Memory allocation failed in LocalSearch_solve\n");
                     free(current_solution);
                     Result res = {INT_MAX, INT_MIN, 0.0, NULL, 0, NULL, 0};
                     return res;
                 }
-
-                int k = 0;
-                if (ls->intra_route_move_type == 0)
+                for (int i = 0; i < num_nodes; i++)
                 {
-                    // Two-nodes exchange
-                    for (int i = 0; i < solution_size - 1; i++)
+                    all_nodes[i] = i;
+                }
+                // Shuffle and select first solution_size nodes
+                shuffle_array(all_nodes, num_nodes);
+                memcpy(current_solution, all_nodes, solution_size * sizeof(int));
+                free(all_nodes);
+            }
+            else if (ls->starting_solution_type == 1)
+            {
+                // Greedy heuristic starting solution (Weighted Greedy 2-Regret)
+                generate_Greedy2Regret_solution(start_node, distances, num_nodes, costs, solution_size, current_solution);
+            }
+
+            // Perform local search on current_solution
+            int current_cost = calculate_cost(current_solution, solution_size, distances, costs);
+
+            int improvement = 1;
+            while (improvement)
+            {
+                improvement = 0;
+                int best_delta = 0;
+                int move_i = -1, move_j = -1;
+                int move_type = -1; // 0 for intra-route, 1 for inter-route
+
+                if (ls->local_search_type == 0) // Steepest
+                {
+                    // Evaluate all possible moves and select the best
+                    int delta = 0;
+                    if (ls->intra_route_move_type == 0)
                     {
-                        for (int j = i + 1; j < solution_size; j++)
+                        // Two-nodes exchange
+                        for (int i = 0; i < solution_size - 1; i++)
                         {
-                            moves[k].i = i;
-                            moves[k].j = j;
-                            moves[k].type = 0; // Intra-route
-                            k++;
+                            for (int j = i + 1; j < solution_size; j++)
+                            {
+                                delta = delta_two_nodes_exchange(current_solution, solution_size, distances, i, j);
+                                if (delta < best_delta)
+                                {
+                                    best_delta = delta;
+                                    move_i = i;
+                                    move_j = j;
+                                    move_type = 0;
+                                }
+                            }
                         }
                     }
-                }
-                else if (ls->intra_route_move_type == 1)
-                {
-                    // Two-edges exchange (2-opt)
+                    else if (ls->intra_route_move_type == 1)
+                    {
+                        // Two-edges exchange (2-opt)
+                        for (int i = 0; i < solution_size; i++)
+                        {
+                            for (int j = i + 2; j < solution_size + (i > 0 ? 0 : -1); j++)
+                            {
+                                int jj = j % solution_size;
+                                if (i == jj)
+                                    continue;
+                                delta = delta_two_edges_exchange(current_solution, solution_size, distances, i, jj);
+                                if (delta < best_delta)
+                                {
+                                    best_delta = delta;
+                                    move_i = i;
+                                    move_j = jj;
+                                    move_type = 0;
+                                }
+                            }
+                        }
+                    }
+                    // Inter-route moves
                     for (int i = 0; i < solution_size; i++)
                     {
-                        for (int j = i + 2; j < solution_size + (i > 0 ? 0 : -1); j++)
+                        for (int node_j = 0; node_j < num_nodes; node_j++)
                         {
-                            int jj = j % solution_size;
-                            if (i == jj)
-                                continue;
-                            moves[k].i = i;
-                            moves[k].j = jj;
-                            moves[k].type = 0; // Intra-route
-                            k++;
+                            if (!is_in_solution(node_j, current_solution, solution_size))
+                            {
+                                delta = delta_inter_route_exchange(current_solution, solution_size, distances, costs, i, node_j);
+                                if (delta < best_delta)
+                                {
+                                    best_delta = delta;
+                                    move_i = i;
+                                    move_j = node_j;
+                                    move_type = 1;
+                                }
+                            }
                         }
                     }
-                }
-                // Inter-route moves
-                for (int i = 0; i < solution_size; i++)
-                {
-                    for (int node_j = 0; node_j < num_nodes; node_j++)
-                    {
-                        if (!is_in_solution(node_j, current_solution, solution_size))
-                        {
-                            moves[k].i = i;
-                            moves[k].j = node_j;
-                            moves[k].type = 1; // Inter-route
-                            k++;
-                        }
-                    }
-                }
-                num_moves = k;
-                shuffle_moves(moves, num_moves);
 
-                for (int m = 0; m < num_moves; m++)
-                {
-                    int delta = 0;
-                    if (moves[m].type == 0)
+                    if (best_delta < 0)
                     {
-                        // Intra-route
-                        if (ls->intra_route_move_type == 0)
-                        {
-                            delta = delta_two_nodes_exchange(current_solution, solution_size, distances, moves[m].i, moves[m].j);
-                        }
-                        else if (ls->intra_route_move_type == 1)
-                        {
-                            delta = delta_two_edges_exchange(current_solution, solution_size, distances, moves[m].i, moves[m].j);
-                        }
-                    }
-                    else if (moves[m].type == 1)
-                    {
-                        // Inter-route
-                        delta = delta_inter_route_exchange(current_solution, solution_size, distances, costs, moves[m].i, moves[m].j);
-                    }
-                    if (delta < 0)
-                    {
-                        // Apply the move
-                        if (moves[m].type == 0)
+                        // Apply the best move
+                        if (move_type == 0)
                         {
                             if (ls->intra_route_move_type == 0)
                             {
                                 // Two-nodes exchange
-                                swap_nodes(current_solution, moves[m].i, moves[m].j);
+                                swap_nodes(current_solution, move_i, move_j);
                             }
                             else if (ls->intra_route_move_type == 1)
                             {
-                                // Two-edges exchange
-                                reverse_segment(current_solution, (moves[m].i + 1) % solution_size, moves[m].j, solution_size);
+                                // Two-edges exchange (2-opt)
+                                reverse_segment(current_solution, (move_i + 1) % solution_size, move_j, solution_size);
+                            }
+                        }
+                        else if (move_type == 1)
+                        {
+                            // Inter-route move
+                            current_solution[move_i] = move_j;
+                        }
+                        current_cost += best_delta;
+                        improvement = 1;
+                    }
+                }
+                else if (ls->local_search_type == 1) // Greedy
+                {
+                    // Generate list of moves and shuffle
+                    int num_moves = 0;
+                    Move* moves = NULL;
+                    int max_moves = (solution_size * (solution_size - 1)) / 2 + solution_size * (num_nodes - solution_size);
+
+                    moves = (Move*)malloc(max_moves * sizeof(Move));
+                    if (!moves)
+                    {
+                        fprintf(stderr, "Error: Memory allocation failed in LocalSearch_solve\n");
+                        free(current_solution);
+                        Result res = {INT_MAX, INT_MIN, 0.0, NULL, 0, NULL, 0};
+                        return res;
+                    }
+
+                    int k = 0;
+                    if (ls->intra_route_move_type == 0)
+                    {
+                        // Two-nodes exchange
+                        for (int i = 0; i < solution_size - 1; i++)
+                        {
+                            for (int j = i + 1; j < solution_size; j++)
+                            {
+                                moves[k].i = i;
+                                moves[k].j = j;
+                                moves[k].type = 0; // Intra-route
+                                k++;
+                            }
+                        }
+                    }
+                    else if (ls->intra_route_move_type == 1)
+                    {
+                        // Two-edges exchange (2-opt)
+                        for (int i = 0; i < solution_size; i++)
+                        {
+                            for (int j = i + 2; j < solution_size + (i > 0 ? 0 : -1); j++)
+                            {
+                                int jj = j % solution_size;
+                                if (i == jj)
+                                    continue;
+                                moves[k].i = i;
+                                moves[k].j = jj;
+                                moves[k].type = 0; // Intra-route
+                                k++;
+                            }
+                        }
+                    }
+                    // Inter-route moves
+                    for (int i = 0; i < solution_size; i++)
+                    {
+                        for (int node_j = 0; node_j < num_nodes; node_j++)
+                        {
+                            if (!is_in_solution(node_j, current_solution, solution_size))
+                            {
+                                moves[k].i = i;
+                                moves[k].j = node_j;
+                                moves[k].type = 1; // Inter-route
+                                k++;
+                            }
+                        }
+                    }
+                    num_moves = k;
+                    shuffle_moves(moves, num_moves);
+
+                    for (int m = 0; m < num_moves; m++)
+                    {
+                        int delta = 0;
+                        if (moves[m].type == 0)
+                        {
+                            // Intra-route
+                            if (ls->intra_route_move_type == 0)
+                            {
+                                delta = delta_two_nodes_exchange(current_solution, solution_size, distances, moves[m].i, moves[m].j);
+                            }
+                            else if (ls->intra_route_move_type == 1)
+                            {
+                                delta = delta_two_edges_exchange(current_solution, solution_size, distances, moves[m].i, moves[m].j);
                             }
                         }
                         else if (moves[m].type == 1)
                         {
                             // Inter-route
-                            current_solution[moves[m].i] = moves[m].j;
+                            delta = delta_inter_route_exchange(current_solution, solution_size, distances, costs, moves[m].i, moves[m].j);
                         }
-                        current_cost += delta;
-                        improvement = 1;
-                        break;
+                        if (delta < 0)
+                        {
+                            // Apply the move
+                            if (moves[m].type == 0)
+                            {
+                                if (ls->intra_route_move_type == 0)
+                                {
+                                    // Two-nodes exchange
+                                    swap_nodes(current_solution, moves[m].i, moves[m].j);
+                                }
+                                else if (ls->intra_route_move_type == 1)
+                                {
+                                    // Two-edges exchange
+                                    reverse_segment(current_solution, (moves[m].i + 1) % solution_size, moves[m].j, solution_size);
+                                }
+                            }
+                            else if (moves[m].type == 1)
+                            {
+                                // Inter-route
+                                current_solution[moves[m].i] = moves[m].j;
+                            }
+                            current_cost += delta;
+                            improvement = 1;
+                            break;
+                        }
                     }
+                    free(moves);
                 }
-                free(moves);
             }
-        }
 
-        // Update best, worst, total cost
-        totalCost += current_cost;
-        if (current_cost < bestCost)
-        {
-            bestCost = current_cost;
-            if (bestSolution)
-                free(bestSolution);
-            bestSolution = (int*)malloc(solution_size * sizeof(int));
-            if (bestSolution)
+            // Update best, worst, total cost
+            totalCost += current_cost;
+            if (current_cost < bestCost)
             {
-                memcpy(bestSolution, current_solution, solution_size * sizeof(int));
-                bestSolutionSize = solution_size;
+                bestCost = current_cost;
+                if (bestSolution)
+                    free(bestSolution);
+                bestSolution = (int*)malloc(solution_size * sizeof(int));
+                if (bestSolution)
+                {
+                    memcpy(bestSolution, current_solution, solution_size * sizeof(int));
+                    bestSolutionSize = solution_size;
+                }
             }
-        }
-        if (current_cost > worstCost)
-        {
-            worstCost = current_cost;
-            if (worstSolution)
-                free(worstSolution);
-            worstSolution = (int*)malloc(solution_size * sizeof(int));
-            if (worstSolution)
+            if (current_cost > worstCost)
             {
-                memcpy(worstSolution, current_solution, solution_size * sizeof(int));
-                worstSolutionSize = solution_size;
+                worstCost = current_cost;
+                if (worstSolution)
+                    free(worstSolution);
+                worstSolution = (int*)malloc(solution_size * sizeof(int));
+                if (worstSolution)
+                {
+                    memcpy(worstSolution, current_solution, solution_size * sizeof(int));
+                    worstSolutionSize = solution_size;
+                }
             }
+            free(current_solution);
         }
-        free(current_solution);
     }
 
-    double averageCost = (num_solutions > 0) ? ((double)totalCost / num_solutions) : 0.0;
+    double averageCost = (total_iterations > 0) ? ((double)totalCost / total_iterations) : 0.0;
 
     Result res;
     res.bestCost = bestCost;
@@ -364,6 +368,7 @@ static Result LocalSearch_solve(Algo *algo, const int **distances, int num_nodes
 
     return res;
 }
+
 
 // Helper functions implementation
 
