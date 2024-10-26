@@ -4,6 +4,7 @@
 #include <time.h>
 #include "algorithms.h"
 #include "utils.h"
+#include "local_search.h"
 
 // Function to calculate elapsed time in milliseconds
 double get_elapsed_time_ms(struct timespec start, struct timespec end) {
@@ -24,31 +25,42 @@ int main(int argc, char* argv[]) {
     srand((unsigned int)time(NULL));
 
     // Create algorithm instances
-    int num_algorithms = 6;
-    Algo* algorithms[6];
-    algorithms[0] = (Algo*)create_RandomSearch();
-    algorithms[1] = (Algo*)create_NearestNeighboursEndInsert();
-    algorithms[2] = (Algo*)create_NearestNeighboursAnywhereInsert();
-    algorithms[3] = (Algo*)create_GreedyCycle();
-    algorithms[4] = (Algo*)create_Greedy2Regret();
-    algorithms[5] = (Algo*)create_Greedy2RegretWeighted();
+    int num_algorithms = 14; // 6 existing algorithms + 8 local search algorithms
+    Algo* algorithms[14];
 
-    // Check if any algorithm failed to be created
-    for(int a = 0; a < num_algorithms; a++) {
-        if(algorithms[a] == NULL) {
-            fprintf(stderr, "Error: Failed to create algorithm %d\n", a);
-            // Optionally, handle error (e.g., exit or skip)
-            // For this example, we'll exit
-            exit(EXIT_FAILURE);
+    int index = 0;
+
+    // Existing algorithms
+    algorithms[index++] = (Algo*)create_RandomSearch();
+    algorithms[index++] = (Algo*)create_NearestNeighboursEndInsert();
+    algorithms[index++] = (Algo*)create_NearestNeighboursAnywhereInsert();
+    algorithms[index++] = (Algo*)create_GreedyCycle();
+    algorithms[index++] = (Algo*)create_Greedy2Regret();
+    algorithms[index++] = (Algo*)create_Greedy2RegretWeighted();
+
+    // Local Search algorithms
+    for (int ls_type = 0; ls_type <= 1; ls_type++) // 0: Steepest, 1: Greedy
+    {
+        for (int move_type = 0; move_type <= 1; move_type++) // 0: Two-nodes exchange, 1: Two-edges exchange
+        {
+            for (int start_type = 0; start_type <= 1; start_type++) // 0: Random starting solution, 1: Greedy heuristic
+            {
+                algorithms[index++] = (Algo*)create_LocalSearch(ls_type, move_type, start_type, index);
+            }
         }
     }
 
-    // List of files to process (only TSPA and TSPB)
+    // List of files to process
     const char* files[] = {"data/TSPA.csv", "data/TSPB.csv"};
     int num_files = sizeof(files) / sizeof(files[0]);
 
     // Number of solutions to generate per starting node
     int num_solutions = 1;
+
+    // Prepare arrays to store results
+    double avg_costs[num_algorithms][num_files];
+    int min_costs[num_algorithms][num_files];
+    int max_costs[num_algorithms][num_files];
 
     // Loop over algorithms and files
     for(int a = 0; a < num_algorithms; a++) {
@@ -133,6 +145,11 @@ int main(int argc, char* argv[]) {
                    algorithms[a]->name, files[f], elapsed_ms, elapsed_sec);
             printf("----------------------------------------\n");
 
+            // Store results for summary
+            avg_costs[a][f] = res.averageCost;
+            min_costs[a][f] = res.bestCost;
+            max_costs[a][f] = res.worstCost;
+
             // Free allocated memory for this file
             free_Result(res);
             free(costs);
@@ -141,8 +158,22 @@ int main(int argc, char* argv[]) {
         }
     }
 
+    // Print the summary table
+    printf("\nSummary Results:\n");
+    printf("Method\t\t\t\tTSPA\t\t\t\tTSPB\n");
+    printf("\t\t\t\tav (min - max)\t\t\tav (min - max)\n");
+    for(int a = 0; a < num_algorithms; a++) {
+        printf("%s\t%.2f (%d - %d)\t\t%.2f (%d - %d)\n", algorithms[a]->name,
+               avg_costs[a][0], min_costs[a][0], max_costs[a][0],
+               avg_costs[a][1], min_costs[a][1], max_costs[a][1]);
+    }
+
     // Free algorithm instances
     for(int i = 0; i < num_algorithms; i++) {
+        if (i >= 6) {
+            // For LocalSearch algorithms, free the allocated name
+            free((void*)algorithms[i]->name);
+        }
         free(algorithms[i]);
     }
 

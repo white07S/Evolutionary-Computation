@@ -1,5 +1,5 @@
 # Compiler and flags
-CC = gcc-14
+CC = gcc
 CFLAGS = -Wall -Wextra -std=c11 -O2 -fopenmp
 
 # Directories
@@ -8,7 +8,7 @@ INCDIR = include
 BINDIR = bin
 
 # Source files
-SOURCES = $(SRCDIR)/main.c $(SRCDIR)/algorithms.c $(SRCDIR)/utils.c
+SOURCES = $(SRCDIR)/main.c $(SRCDIR)/algorithms.c $(SRCDIR)/utils.c $(SRCDIR)/local_search.c
 
 # Executable name
 EXECUTABLE = $(BINDIR)/greedy_heuristics
