@@ -5,6 +5,7 @@
 #include "algorithms.h"
 #include "utils.h"
 #include "local_search.h"
+#include "cm_local_search.h" // Include the CM_LocalSearch header
 
 // Function to calculate elapsed time in milliseconds
 double get_elapsed_time_ms(struct timespec start, struct timespec end) {
@@ -25,8 +26,8 @@ int main(int argc, char* argv[]) {
     srand((unsigned int)time(NULL));
 
     // Create algorithm instances
-    int num_algorithms = 14; // 6 existing algorithms + 8 local search algorithms
-    Algo* algorithms[14];
+    int num_algorithms = 14 + 1; // Adding 1 for CM_LocalSearch
+    Algo* algorithms[15]; // Adjust size accordingly
 
     int index = 0;
 
@@ -50,17 +51,22 @@ int main(int argc, char* argv[]) {
         }
     }
 
+    // Create CM_LocalSearch algorithm instance with candidate list size 10
+    int cm_algorithm_index = index; // Index of CM_LocalSearch algorithm
+    algorithms[index++] = (Algo*)create_CM_LocalSearch(10); // candidate_list_size = 10
+
     // List of files to process
     const char* files[] = {"data/TSPA.csv", "data/TSPB.csv"};
     int num_files = sizeof(files) / sizeof(files[0]);
 
-    // Number of solutions to generate per starting node
-    int num_solutions = 1;
+    // Number of solutions to generate per method
+    int num_solutions_others = 1; // For algorithms before CM_LocalSearch
+    int num_solutions_cm = 200;    // For CM_LocalSearch
 
     // Prepare arrays to store results
-    double avg_costs[num_algorithms][num_files];
-    int min_costs[num_algorithms][num_files];
-    int max_costs[num_algorithms][num_files];
+    double avg_costs[15][2]; // num_algorithms x num_files
+    int min_costs[15][2];
+    int max_costs[15][2];
 
     // Loop over algorithms and files
     for(int a = 0; a < num_algorithms; a++) {
@@ -96,6 +102,9 @@ int main(int argc, char* argv[]) {
             // Print algorithm and file information
             printf("# Algorithm: %s\n", algorithms[a]->name);
             printf("## File: %s\n", files[f]);
+
+            // Determine number of solutions based on algorithm
+            int num_solutions = (a == cm_algorithm_index) ? num_solutions_cm : num_solutions_others;
 
             // Start timing before the solve function
             struct timespec start_time, end_time;
@@ -141,7 +150,7 @@ int main(int argc, char* argv[]) {
 
             snprintf(result_filename, sizeof(result_filename), "%s_%s_result.txt", algorithms[a]->name, base_name);
             write_Result_to_file(res, result_filename, (const int**)distances, costs);
-            printf("Time taken by %s on %s: %.3f ms (%.3f seconds)\n", 
+            printf("Time taken by %s on %s: %.3f ms (%.3f seconds)\n",
                    algorithms[a]->name, files[f], elapsed_ms, elapsed_sec);
             printf("----------------------------------------\n");
 
@@ -170,8 +179,11 @@ int main(int argc, char* argv[]) {
 
     // Free algorithm instances
     for(int i = 0; i < num_algorithms; i++) {
-        if (i >= 6) {
+        if (i >= 6 && i < 14) {
             // For LocalSearch algorithms, free the allocated name
+            free((void*)algorithms[i]->name);
+        } else if (i == cm_algorithm_index) {
+            // For CM_LocalSearch algorithm, free the allocated name
             free((void*)algorithms[i]->name);
         }
         free(algorithms[i]);
