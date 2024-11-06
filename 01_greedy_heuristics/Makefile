@@ -1,6 +1,6 @@
 # Compiler and flags
 CC = gcc
-CFLAGS = -Wall -Wextra -std=c11 -O2 -fopenmp
+CFLAGS = -Wall -Wextra -std=c11 -O2
 
 # Directories
 SRCDIR = src
@@ -8,7 +8,7 @@ INCDIR = include
 BINDIR = bin
 
 # Source files
-SOURCES = $(SRCDIR)/main.c $(SRCDIR)/algorithms.c $(SRCDIR)/utils.c $(SRCDIR)/local_search.c $(SRCDIR)/cm_local_search.c
+SOURCES = $(SRCDIR)/main.c $(SRCDIR)/algorithms.c $(SRCDIR)/utils.c $(SRCDIR)/local_search.c $(SRCDIR)/cm_local_search.c $(SRCDIR)/delta_local_search.c
 
 # Executable name
 EXECUTABLE = $(BINDIR)/greedy_heuristics
