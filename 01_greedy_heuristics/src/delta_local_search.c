@@ -5,16 +5,16 @@
 #include <stdio.h>
 
 // Define Move structure
-typedef struct
-{
-    int i;
-    int j;
-    int type; // 0 for intra-route (2-opt), 1 for inter-route
-    int delta;
-    int edge_u1, edge_u2; // Edge u1-u2 to be removed
-    int edge_v1, edge_v2; // Edge v1-v2 to be removed
-    int reversed; // 1 if edges are reversed, 0 otherwise
-} Move;
+// typedef struct
+// {
+//     int i;
+//     int j;
+//     int type; // 0 for intra-route (2-opt), 1 for inter-route
+//     int delta;
+//     int edge_u1, edge_u2; // Edge u1-u2 to be removed
+//     int edge_v1, edge_v2; // Edge v1-v2 to be removed
+//     int reversed; // 1 if edges are reversed, 0 otherwise
+// } Move;
 
 // Function prototypes
 static Result DeltaLocalSearch_solve(Algo *algo, const int **distances, int num_nodes, const int *costs, int num_solutions);
@@ -108,9 +108,11 @@ static Result DeltaLocalSearch_solve(Algo *algo, const int **distances, int num_
         }
 
         // Initialize list of improving moves (LM)
-        Move* LM = NULL;
-        int LM_size = 0;
-        int LM_capacity = 0;
+        // Move* LM = NULL;
+        // int LM_size = 0;
+        // int LM_capacity = 0;
+        SortedDoublyLinkedList LM;
+        initList(&LM);
 
         // Initialize predecessor and successor arrays
         int* successor = (int*)malloc(num_nodes * sizeof(int));
@@ -143,24 +145,33 @@ static Result DeltaLocalSearch_solve(Algo *algo, const int **distances, int num_
             int found_improving_move = 0;
 
             // First, check the LM
-            int lm_index = 0;
-            while (lm_index < LM_size)
+            // int lm_index = 0;
+            Node* node = LM.head;
+            // while (lm_index < LM_size)
+            while (node != NULL)
             {
-                Move* move = &LM[lm_index];
+                // Move* move = &LM[lm_index];
+                Move* move = &node->move;
+
+
 
                 int update_status = update_move(move, predecessor, successor);
 
                 if (update_status == -1)
                 {
                     // Remove move from LM
-                    LM[lm_index] = LM[LM_size - 1];
-                    LM_size--;
+                    // LM[lm_index] = LM[LM_size - 1];
+                    // LM_size--;
+                    Node* next_node = node->next;
+                    deleteNode(&LM, node);
+                    node = next_node;
                     continue;
                 }
                 else if (update_status == 0)
                 {
                     // Edges reversed or mixed orientation, leave move in LM
-                    lm_index++;
+                    // lm_index++;
+                    node = node->next;
                     continue;
                 }
                 else if (update_status == 1)
@@ -179,9 +190,12 @@ static Result DeltaLocalSearch_solve(Algo *algo, const int **distances, int num_
                     }
 
                     // Remove move from LM
-                    LM[lm_index] = LM[LM_size - 1];
-                    LM_size--;
+                    // LM[lm_index] = LM[LM_size - 1];
+                    // LM_size--;
 
+                    Node* next_node = node->next;
+                    deleteNode(&LM, node);
+                    node = next_node;
                     found_improving_move = 1;
                     break;
                 }
@@ -199,6 +213,7 @@ static Result DeltaLocalSearch_solve(Algo *algo, const int **distances, int num_
             Move new_best_move;
             int delta = 0;
 
+            
             // Intra-route moves (2-opt)
             for (int i = 0; i < solution_size; i++)
             {
@@ -275,22 +290,23 @@ static Result DeltaLocalSearch_solve(Algo *algo, const int **distances, int num_
                 }
 
                 // Add the move to LM
-                if (LM_size == LM_capacity)
-                {
-                    LM_capacity = LM_capacity == 0 ? 10 : LM_capacity * 2;
-                    LM = (Move*)realloc(LM, LM_capacity * sizeof(Move));
-                    if (!LM)
-                    {
-                        fprintf(stderr, "Error: Memory allocation failed for LM\n");
-                        free(current_solution);
-                        free(in_solution);
-                        free(successor);
-                        free(predecessor);
-                        Result res = {INT_MAX, INT_MIN, 0.0, NULL, 0, NULL, 0};
-                        return res;
-                    }
-                }
-                LM[LM_size++] = new_best_move;
+                // if (LM_size == LM_capacity)
+                // {
+                //     LM_capacity = LM_capacity == 0 ? 10 : LM_capacity * 2;
+                //     LM = (Move*)realloc(LM, LM_capacity * sizeof(Move));
+                //     if (!LM)
+                //     {
+                //         fprintf(stderr, "Error: Memory allocation failed for LM\n");
+                //         free(current_solution);
+                //         free(in_solution);
+                //         free(successor);
+                //         free(predecessor);
+                //         Result res = {INT_MAX, INT_MIN, 0.0, NULL, 0, NULL, 0};
+                //         return res;
+                //     }
+                // }
+                // LM[LM_size++] = new_best_move;
+                insert(&LM, new_best_move);
             }
             else
             {
@@ -329,9 +345,15 @@ static Result DeltaLocalSearch_solve(Algo *algo, const int **distances, int num_
         // Free resources
         free(current_solution);
         free(in_solution);
-        free(LM);
+        // free(LM);
         free(successor);
         free(predecessor);
+        Node* node = LM.head;
+        while (node != NULL) {
+            Node* next_node = node->next;
+            deleteNode(&LM, node);
+            node = next_node;
+        }
     }
 
     double averageCost = (total_iterations > 0) ? ((double)totalCost / total_iterations) : 0.0;
@@ -539,3 +561,120 @@ static int update_move(Move* move, const int* predecessor, const int* successor)
     // Move can be applied
     return 1;
 }
+
+
+// functions for linked list implementation
+
+// Function to create a new node with a Move
+static Node* createNode(Move move) {
+    Node* newNode = (Node*)malloc(sizeof(Node));
+    newNode->move = move;
+    newNode->next = NULL;
+    newNode->prev = NULL;
+    return newNode;
+}
+
+// Function to initialize the doubly linked list
+void initList(SortedDoublyLinkedList* list) {
+    list->head = NULL;
+}
+
+// Function to insert a Move in sorted order (based on delta)
+void insert(SortedDoublyLinkedList* list, Move move) {
+    Node* newNode = createNode(move);
+    if (list->head == NULL) {  // List is empty
+        list->head = newNode;
+        return;
+    }
+
+    // Insert in sorted order based on delta
+    Node* current = list->head;
+    Node* previous = NULL;
+
+    // Traverse to find the correct insertion point
+    while (current != NULL && current->move.delta < move.delta) {
+        previous = current;
+        current = current->next;
+    }
+
+    if (previous == NULL) {  // Insert at the beginning
+        newNode->next = list->head;
+        list->head->prev = newNode;
+        list->head = newNode;
+    } else if (current == NULL) {  // Insert at the end
+        previous->next = newNode;
+        newNode->prev = previous;
+    } else {  // Insert in the middle
+        previous->next = newNode;
+        newNode->prev = previous;
+        newNode->next = current;
+        current->prev = newNode;
+    }
+}
+
+// Function to get the smallest Move (first element in the list)
+Move* getSmallest(SortedDoublyLinkedList* list) {
+    if (list->head == NULL) {
+        return NULL;
+    }
+    return &list->head->move;
+}
+
+// Function to delete the smallest Move
+void deleteSmallest(SortedDoublyLinkedList* list) {
+    if (list->head == NULL) {
+        return;
+    }
+
+    Node* temp = list->head;
+    list->head = list->head->next;
+    if (list->head != NULL) {
+        list->head->prev = NULL;
+    }
+
+    free(temp);  // Free the memory of the removed node
+}
+
+
+// Function to delete a specific node from the list
+void deleteNode(SortedDoublyLinkedList* list, Node* node) {
+    if (node == NULL) {
+        return;
+    }
+
+    // Adjust head if necessary
+    if (node == list->head) {
+        list->head = node->next;
+        if (list->head != NULL) {
+            list->head->prev = NULL;
+        }
+    } else {
+        // Adjust the previous node's next pointer
+        if (node->prev != NULL) {
+            node->prev->next = node->next;
+        }
+    }
+
+    // Adjust the next node's previous pointer
+    if (node->next != NULL) {
+        node->next->prev = node->prev;
+    }
+
+    // Free the node memory
+    free(node);        // Free the node itself
+
+}
+
+
+// Function to print the list (for debugging purposes)
+void printList(SortedDoublyLinkedList* list) {
+    Node* current = list->head;
+    printf("List: ");
+    while (current != NULL) {
+        printf("{delta: %d, i: %d, j: %d} ", current->move.delta, current->move.i, current->move.j);
+        current = current->next;
+    }
+    printf("\n");
+}
+
+

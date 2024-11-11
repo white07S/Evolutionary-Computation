@@ -7,7 +7,7 @@
 #include "local_search.h"
 // #include "cm_local_search.h" // Include the CM_LocalSearch header
 #include "delta_local_search.h" // Include the Delta_LocalSearch header
-#include <linux/time.h>
+#include <time.h>
 
 // Function to calculate elapsed time in milliseconds
 // Uncomment if DeltaLocalSearch requires it
