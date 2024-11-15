@@ -29,9 +29,11 @@ static Result DeltaLocalSearch_solve(Algo *algo, const int **distances, int num_
 static int delta_two_edges_exchange(const int* solution, int solution_size, const int** distances, int i, int j);
 static int delta_inter_route_exchange(const int* solution, int solution_size, const int** distances, const int* costs, int i, int node_j);
 static void reverse_segment(int* solution, int start, int end, int solution_size);
+
 static void apply_move(int* solution, int solution_size, Move* move, int* predecessor, int* successor);
 static int update_move(Move* move, const int* predecessor, const int* successor);
 static void evaluate_all_moves_and_add_to_LM(int* current_solution, int solution_size, const int** distances, const int* costs, const char* in_solution, int* predecessor, int* successor, int num_nodes, PriorityQueue* pq);
+
 static void init_pq(PriorityQueue* pq, int capacity);
 static void free_pq(PriorityQueue* pq);
 static void insert_move_pq(PriorityQueue* pq, Move* move);
