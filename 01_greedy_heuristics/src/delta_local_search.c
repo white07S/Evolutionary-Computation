@@ -225,6 +225,9 @@ static Result DeltaLocalSearch_solve(Algo *algo, const int **distances, int num_
 
                     delta = delta_two_edges_exchange(current_solution, solution_size, distances, i, jj);
 
+                    // FIXME: each move with delta < 0 should be added to 
+                    // the LM. The best move should be kept track of, so that
+                    // it can be applied after evaluating all the moves 
                     if (delta < best_delta)
                     {
                         best_delta = delta;
@@ -252,6 +255,9 @@ static Result DeltaLocalSearch_solve(Algo *algo, const int **distances, int num_
                     {
                         delta = delta_inter_route_exchange(current_solution, solution_size, distances, costs, i, node_j);
 
+                        // FIXME: each move with delta < 0 should be added to 
+                        // the LM. The best move should be kept track of, so that
+                        // it can be applied after evaluating all the moves 
                         if (delta < best_delta)
                         {
                             best_delta = delta;
@@ -306,6 +312,8 @@ static Result DeltaLocalSearch_solve(Algo *algo, const int **distances, int num_
                 //     }
                 // }
                 // LM[LM_size++] = new_best_move;
+
+                //FIXME: Here, the items should not be added to the LM but removed.
                 insert(&LM, new_best_move);
             }
             else
