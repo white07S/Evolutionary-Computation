@@ -5,7 +5,8 @@
 - use linked list instead of an array
 - keep the linked list sorted w.r.t. delta
 - in the phase of evaluating all possible moves, add to the LM each move
-that yields an improvement
+that yields an improvement (in the current implementation we only keep track 
+of the best move)
 - in the phase of applying a move, remove the move from LM instead of adding it
 to the LM
 
