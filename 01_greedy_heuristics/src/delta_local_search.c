@@ -16,14 +16,26 @@ typedef struct
     int reversed; // 1 if edges are reversed, 0 otherwise
 } Move;
 
+// Define Priority Queue structure
+typedef struct
+{
+    Move* moves; // Array of moves
+    int size;    // Current number of moves
+    int capacity; // Capacity of the moves array
+} PriorityQueue;
+
 // Function prototypes
 static Result DeltaLocalSearch_solve(Algo *algo, const int **distances, int num_nodes, const int *costs, int num_solutions);
 static int delta_two_edges_exchange(const int* solution, int solution_size, const int** distances, int i, int j);
 static int delta_inter_route_exchange(const int* solution, int solution_size, const int** distances, const int* costs, int i, int node_j);
 static void reverse_segment(int* solution, int start, int end, int solution_size);
-static int is_in_solution(int node, const int* solution, int solution_size);
 static void apply_move(int* solution, int solution_size, Move* move, int* predecessor, int* successor);
 static int update_move(Move* move, const int* predecessor, const int* successor);
+static void evaluate_all_moves_and_add_to_LM(int* current_solution, int solution_size, const int** distances, const int* costs, const char* in_solution, int* predecessor, int* successor, int num_nodes, PriorityQueue* pq);
+static void init_pq(PriorityQueue* pq, int capacity);
+static void free_pq(PriorityQueue* pq);
+static void insert_move_pq(PriorityQueue* pq, Move* move);
+static Move* extract_min_move_pq(PriorityQueue* pq);
 
 DeltaLocalSearch* create_DeltaLocalSearch(int method_index)
 {
@@ -107,11 +119,6 @@ static Result DeltaLocalSearch_solve(Algo *algo, const int **distances, int num_
             in_solution[current_solution[i]] = 1;
         }
 
-        // Initialize list of improving moves (LM)
-        Move* LM = NULL;
-        int LM_size = 0;
-        int LM_capacity = 0;
-
         // Initialize predecessor and successor arrays
         int* successor = (int*)malloc(num_nodes * sizeof(int));
         int* predecessor = (int*)malloc(num_nodes * sizeof(int));
@@ -135,32 +142,46 @@ static Result DeltaLocalSearch_solve(Algo *algo, const int **distances, int num_
             predecessor[node] = prev_node;
         }
 
+        // Initialize priority queue LM
+        PriorityQueue LM;
+        init_pq(&LM, 1000); // Initial capacity
+
         // Perform steepest local search with LM
         int current_cost = calculate_cost(current_solution, solution_size, distances, costs);
 
-        while (1)
-        {
-            int found_improving_move = 0;
+        int found_improving_move = 0;
 
-            // First, check the LM
-            int lm_index = 0;
-            while (lm_index < LM_size)
+        do
+        {
+            found_improving_move = 0;
+
+            // Evaluate all possible moves and add improving moves to LM
+            evaluate_all_moves_and_add_to_LM(current_solution, solution_size, distances, costs, in_solution, predecessor, successor, num_nodes, &LM);
+
+            // Process LM
+            while (LM.size > 0)
             {
-                Move* move = &LM[lm_index];
+                Move* move_ptr = extract_min_move_pq(&LM);
+                if (!move_ptr)
+                {
+                    // Priority queue is empty
+                    break;
+                }
+
+                Move* move = move_ptr;
 
                 int update_status = update_move(move, predecessor, successor);
 
                 if (update_status == -1)
                 {
-                    // Remove move from LM
-                    LM[lm_index] = LM[LM_size - 1];
-                    LM_size--;
+                    // Move is invalid, skip
+                    free(move_ptr);
                     continue;
                 }
                 else if (update_status == 0)
                 {
-                    // Edges reversed or mixed orientation, leave move in LM
-                    lm_index++;
+                    // Edges reversed or mixed orientation, skip
+                    free(move_ptr);
                     continue;
                 }
                 else if (update_status == 1)
@@ -169,7 +190,7 @@ static Result DeltaLocalSearch_solve(Algo *algo, const int **distances, int num_
                     apply_move(current_solution, solution_size, move, predecessor, successor);
                     current_cost += move->delta;
 
-                    // Update in_solution array
+                    // Update in_solution array if necessary
                     if (move->type == 1)
                     {
                         int old_node = move->edge_u2; // node_i
@@ -178,126 +199,27 @@ static Result DeltaLocalSearch_solve(Algo *algo, const int **distances, int num_
                         in_solution[new_node] = 1;
                     }
 
-                    // Remove move from LM
-                    LM[lm_index] = LM[LM_size - 1];
-                    LM_size--;
+                    free(move_ptr);
 
                     found_improving_move = 1;
                     break;
                 }
             }
 
-            if (found_improving_move)
+            // If no improving move was found after checking the whole LM, exit loop
+            if (!found_improving_move)
             {
-                continue; // Go back to LM
-            }
-
-            // If no improving move in LM, evaluate new moves
-
-            // Evaluate all possible moves
-            int best_delta = 0;
-            Move new_best_move;
-            int delta = 0;
-
-            // Intra-route moves (2-opt)
-            for (int i = 0; i < solution_size; i++)
-            {
-                for (int j = i + 2; j < solution_size + (i > 0 ? 0 : -1); j++)
-                {
-                    int jj = j % solution_size;
-                    if (i == jj)
-                        continue;
-
-                    delta = delta_two_edges_exchange(current_solution, solution_size, distances, i, jj);
-
-                    if (delta < best_delta)
-                    {
-                        best_delta = delta;
-                        new_best_move.i = i;
-                        new_best_move.j = jj;
-                        new_best_move.type = 0;
-                        new_best_move.delta = delta;
-                        new_best_move.reversed = 0;
-
-                        // Save the edges involved
-                        new_best_move.edge_u1 = current_solution[i];
-                        new_best_move.edge_u2 = current_solution[(i + 1) % solution_size];
-                        new_best_move.edge_v1 = current_solution[jj];
-                        new_best_move.edge_v2 = current_solution[(jj + 1) % solution_size];
-                    }
-                }
-            }
-
-            // Inter-route moves
-            for (int i = 0; i < solution_size; i++)
-            {
-                for (int node_j = 0; node_j < num_nodes; node_j++)
-                {
-                    if (!in_solution[node_j])
-                    {
-                        delta = delta_inter_route_exchange(current_solution, solution_size, distances, costs, i, node_j);
-
-                        if (delta < best_delta)
-                        {
-                            best_delta = delta;
-                            new_best_move.i = i;
-                            new_best_move.j = node_j;
-                            new_best_move.type = 1;
-                            new_best_move.delta = delta;
-                            new_best_move.reversed = 0;
-
-                            // Save the edges involved
-                            int prev_i_node = predecessor[current_solution[i]];
-                            int next_i_node = successor[current_solution[i]];
-
-                            new_best_move.edge_u1 = prev_i_node;
-                            new_best_move.edge_u2 = current_solution[i];
-                            new_best_move.edge_v1 = current_solution[i];
-                            new_best_move.edge_v2 = next_i_node;
-                        }
-                    }
-                }
-            }
-
-            if (best_delta < 0)
-            {
-                // Apply the best move
-                apply_move(current_solution, solution_size, &new_best_move, predecessor, successor);
-                current_cost += best_delta;
-
-                // Update in_solution array
-                if (new_best_move.type == 1)
-                {
-                    int old_node = new_best_move.edge_u2; // node_i
-                    int new_node = new_best_move.j;
-                    in_solution[old_node] = 0;
-                    in_solution[new_node] = 1;
-                }
-
-                // Add the move to LM
-                if (LM_size == LM_capacity)
-                {
-                    LM_capacity = LM_capacity == 0 ? 10 : LM_capacity * 2;
-                    LM = (Move*)realloc(LM, LM_capacity * sizeof(Move));
-                    if (!LM)
-                    {
-                        fprintf(stderr, "Error: Memory allocation failed for LM\n");
-                        free(current_solution);
-                        free(in_solution);
-                        free(successor);
-                        free(predecessor);
-                        Result res = {INT_MAX, INT_MIN, 0.0, NULL, 0, NULL, 0};
-                        return res;
-                    }
-                }
-                LM[LM_size++] = new_best_move;
-            }
-            else
-            {
-                // No improving move found
                 break;
             }
-        }
+
+            // Clear LM before next iteration
+            free_pq(&LM);
+            init_pq(&LM, 1000);
+
+        } while (found_improving_move);
+
+        // Free LM
+        free_pq(&LM);
 
         // Update best, worst, total cost
         totalCost += current_cost;
@@ -329,7 +251,6 @@ static Result DeltaLocalSearch_solve(Algo *algo, const int **distances, int num_
         // Free resources
         free(current_solution);
         free(in_solution);
-        free(LM);
         free(successor);
         free(predecessor);
     }
@@ -346,6 +267,193 @@ static Result DeltaLocalSearch_solve(Algo *algo, const int **distances, int num_
     res.worstSolutionSize = worstSolutionSize;
 
     return res;
+}
+
+static void init_pq(PriorityQueue* pq, int capacity)
+{
+    pq->moves = (Move*)malloc(capacity * sizeof(Move));
+    if (!pq->moves)
+    {
+        fprintf(stderr, "Error: Memory allocation failed for PriorityQueue\n");
+        pq->size = 0;
+        pq->capacity = 0;
+        return;
+    }
+    pq->size = 0;
+    pq->capacity = capacity;
+}
+
+static void free_pq(PriorityQueue* pq)
+{
+    if (pq->moves)
+    {
+        free(pq->moves);
+        pq->moves = NULL;
+    }
+    pq->size = 0;
+    pq->capacity = 0;
+}
+
+static void insert_move_pq(PriorityQueue* pq, Move* move)
+{
+    // Ensure capacity
+    if (pq->size >= pq->capacity)
+    {
+        // Resize the array
+        pq->capacity *= 2;
+        pq->moves = (Move*)realloc(pq->moves, pq->capacity * sizeof(Move));
+        if (!pq->moves)
+        {
+            fprintf(stderr, "Error: Memory allocation failed in insert_move_pq\n");
+            return;
+        }
+    }
+
+    // Insert the move at the end
+    pq->moves[pq->size] = *move;
+    pq->size++;
+
+    // Heapify up
+    int i = pq->size - 1;
+    while (i > 0)
+    {
+        int parent = (i - 1) / 2;
+        if (pq->moves[i].delta < pq->moves[parent].delta)
+        {
+            // Swap
+            Move temp = pq->moves[i];
+            pq->moves[i] = pq->moves[parent];
+            pq->moves[parent] = temp;
+            i = parent;
+        }
+        else
+        {
+            break;
+        }
+    }
+}
+
+static Move* extract_min_move_pq(PriorityQueue* pq)
+{
+    if (pq->size == 0)
+    {
+        return NULL;
+    }
+
+    Move* min_move = (Move*)malloc(sizeof(Move));
+    if (!min_move)
+    {
+        fprintf(stderr, "Error: Memory allocation failed in extract_min_move_pq\n");
+        return NULL;
+    }
+
+    *min_move = pq->moves[0];
+
+    // Move last element to root and heapify down
+    pq->moves[0] = pq->moves[pq->size - 1];
+    pq->size--;
+
+    int i = 0;
+    while (i < pq->size)
+    {
+        int left = 2 * i + 1;
+        int right = 2 * i + 2;
+        int smallest = i;
+
+        if (left < pq->size && pq->moves[left].delta < pq->moves[smallest].delta)
+        {
+            smallest = left;
+        }
+        if (right < pq->size && pq->moves[right].delta < pq->moves[smallest].delta)
+        {
+            smallest = right;
+        }
+        if (smallest != i)
+        {
+            // Swap
+            Move temp = pq->moves[i];
+            pq->moves[i] = pq->moves[smallest];
+            pq->moves[smallest] = temp;
+            i = smallest;
+        }
+        else
+        {
+            break;
+        }
+    }
+
+    return min_move;
+}
+
+static void evaluate_all_moves_and_add_to_LM(int* current_solution, int solution_size, const int** distances, const int* costs, const char* in_solution, int* predecessor, int* successor, int num_nodes, PriorityQueue* pq)
+{
+    int delta;
+    Move move;
+
+    // Intra-route moves (2-opt)
+    for (int i = 0; i < solution_size; i++)
+    {
+        for (int j = i + 2; j < solution_size + (i > 0 ? 0 : -1); j++)
+        {
+            int jj = j % solution_size;
+            if (i == jj)
+                continue;
+
+            delta = delta_two_edges_exchange(current_solution, solution_size, distances, i, jj);
+
+            if (delta < 0)
+            {
+                move.i = i;
+                move.j = jj;
+                move.type = 0;
+                move.delta = delta;
+                move.reversed = 0;
+
+                // Save the edges involved
+                move.edge_u1 = current_solution[i];
+                move.edge_u2 = current_solution[(i + 1) % solution_size];
+                move.edge_v1 = current_solution[jj];
+                move.edge_v2 = current_solution[(jj + 1) % solution_size];
+
+                // Insert move into priority queue
+                insert_move_pq(pq, &move);
+            }
+        }
+    }
+
+    // Inter-route moves
+    for (int i = 0; i < solution_size; i++)
+    {
+        for (int node_j = 0; node_j < num_nodes; node_j++)
+        {
+            if (!in_solution[node_j])
+            {
+                delta = delta_inter_route_exchange(current_solution, solution_size, distances, costs, i, node_j);
+
+                if (delta < 0)
+                {
+                    move.i = i;
+                    move.j = node_j;
+                    move.type = 1;
+                    move.delta = delta;
+                    move.reversed = 0;
+
+                    // Save the edges involved
+                    int node_i = current_solution[i];
+                    int prev_i_node = predecessor[node_i];
+                    int next_i_node = successor[node_i];
+
+                    move.edge_u1 = prev_i_node;
+                    move.edge_u2 = node_i;
+                    move.edge_v1 = node_i;
+                    move.edge_v2 = next_i_node;
+
+                    // Insert move into priority queue
+                    insert_move_pq(pq, &move);
+                }
+            }
+        }
+    }
 }
 
 static int delta_two_edges_exchange(const int* solution, int solution_size, const int** distances, int i, int j)
@@ -426,28 +534,18 @@ static void apply_move(int* solution, int solution_size, Move* move, int* predec
         int size = solution_size;
         int i = move->i;
         int j = move->j;
-        int node_i = solution[i];
-        int node_ip1 = solution[(i + 1) % size];
-        int node_j = solution[j];
-        int node_jp1 = solution[(j + 1) % size];
 
         // Reverse the segment between (i+1) and j
         reverse_segment(solution, (i + 1) % size, j, solution_size);
 
         // Update predecessor and successor arrays
-        int current_node = node_i;
-        int next_node = solution[(i + 1) % size];
-        successor[current_node] = next_node;
-        predecessor[next_node] = current_node;
-
-        int idx = (i + 1) % size;
-        while (idx != (j + 1) % size)
+        for (int idx = 0; idx < size; idx++)
         {
-            current_node = solution[idx];
-            next_node = solution[(idx + 1) % size];
-            successor[current_node] = next_node;
-            predecessor[next_node] = current_node;
-            idx = (idx + 1) % size;
+            int node = solution[idx];
+            int next_node = solution[(idx + 1) % size];
+            int prev_node = solution[(idx - 1 + size) % size];
+            successor[node] = next_node;
+            predecessor[node] = prev_node;
         }
     }
     else if (move->type == 1)
@@ -489,8 +587,6 @@ static int update_move(Move* move, const int* predecessor, const int* successor)
     int edge_v1_pred = predecessor[edge_v1];
 
     int edges_exist = 1;
-    int edges_same_direction = 0;
-    int edges_reversed = 0;
 
     // Check if edges exist
     if ((edge_u1_succ == edge_u2) || (edge_u1_pred == edge_u2))
@@ -521,21 +617,14 @@ static int update_move(Move* move, const int* predecessor, const int* successor)
     int edge_u1_orientation = (edge_u1_succ == edge_u2) ? 1 : -1; // 1 for forward, -1 for reversed
     int edge_v1_orientation = (edge_v1_succ == edge_v2) ? 1 : -1;
 
-    if (edge_u1_orientation == 1 && edge_v1_orientation == 1)
+    if (edge_u1_orientation == edge_v1_orientation)
     {
-        edges_same_direction = 1;
-    }
-    else if (edge_u1_orientation == -1 && edge_v1_orientation == -1)
-    {
-        edges_same_direction = 1;
-        move->reversed = 1; // Both edges reversed
+        // Edges have same orientation
+        return 1; // Apply the move
     }
     else
     {
         // Edges have mixed orientations
         return 0; // Leave move in LM but do not apply now
     }
-
-    // Move can be applied
-    return 1;
 }
