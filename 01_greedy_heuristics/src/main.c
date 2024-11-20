@@ -5,12 +5,12 @@
 #include "algorithms.h"
 #include "utils.h"
 #include "local_search.h"
-// #include "cm_local_search.h" // Include the CM_LocalSearch header
-#include "delta_local_search.h" // Include the Delta_LocalSearch header
+#include "delta_local_search.h"
+#include "msls.h"        // Include MSLS header
+#include "ils.h"         // Include ILS header
 #include <linux/time.h>
 
 // Function to calculate elapsed time in milliseconds
-// Uncomment if DeltaLocalSearch requires it
 double get_elapsed_time_ms(struct timespec start, struct timespec end) {
     double start_ms = start.tv_sec * 1000.0 + start.tv_nsec / 1.0e6;
     double end_ms = end.tv_sec * 1000.0 + end.tv_nsec / 1.0e6;
@@ -18,7 +18,6 @@ double get_elapsed_time_ms(struct timespec start, struct timespec end) {
 }
 
 // Function to calculate elapsed time in seconds
-// Uncomment if DeltaLocalSearch requires it
 double get_elapsed_time_sec(struct timespec start, struct timespec end) {
     double start_sec = start.tv_sec + start.tv_nsec / 1.0e9;
     double end_sec = end.tv_sec + end.tv_nsec / 1.0e9;
@@ -30,41 +29,28 @@ int main(int argc, char* argv[]) {
     srand((unsigned int)time(NULL));
 
     // Create algorithm instances
-    // int num_algorithms = 14 + 2; // Original number of algorithms
-    // Algo* algorithms[16]; // Original array size
+    // Adjust the number of algorithms and their initialization as needed
+    int num_algorithms = 3; // Example: RandomSearch, MSLS, ILS
+    Algo* algorithms[3];
 
-    // int index = 0;
-
-    // // Initialize other algorithms
-    // algorithms[index++] = (Algo*)create_RandomSearch();
-    // algorithms[index++] = (Algo*)create_NearestNeighboursEndInsert();
-    // algorithms[index++] = (Algo*)create_NearestNeighboursAnywhereInsert();
-    // algorithms[index++] = (Algo*)create_GreedyCycle();
-    // algorithms[index++] = (Algo*)create_Greedy2Regret();
-    // algorithms[index++] = (Algo*)create_Greedy2RegretWeighted();
-
-    // // Initialize Local Search algorithms
-    // algorithms[index++] = (Algo*)create_LocalSearch(0, 1, 0, index); // Steepest, Two-edges exchange, RandomStart
-
-    // Initialize only DeltaLocalSearch algorithm
-    int num_algorithms = 1; // Only one algorithm
-    Algo* algorithms[1]; // Array size adjusted for one algorithm
-
-    // Create DeltaLocalSearch algorithm
-    algorithms[0] = (Algo*)create_DeltaLocalSearch(0); // Assuming '0' is the appropriate parameter
+    // Initialize DeltaLocalSearch as MSLS
+    algorithms[0] = (Algo*)create_DeltaLocalSearch(0); // Existing DeltaLocalSearch
+    // Initialize Multiple Start Local Search
+    algorithms[1] = (Algo*)create_MSLS(200); // 200 iterations as per requirement
+    // Initialize Iterated Local Search
+    // Assuming average running time of MSLS is approximated as 200 iterations
+    // Set max_time_ms accordingly, e.g., 200 * average time per iteration
+    // For simplicity, set a fixed time or adjust as needed
+    algorithms[2] = (Algo*)create_ILS(10000, 5); // 10 seconds and perturbation strength of 5
 
     // List of files to process
     const char* files[] = {"data/TSPA.csv", "data/TSPB.csv"};
     int num_files = sizeof(files) / sizeof(files[0]);
 
     // Number of solutions to generate per method
-    // int num_solutions_others = 200; // For other algorithms
-    int num_solutions_delta = 1;    // For DeltaLocalSearch
-
-    // Prepare arrays to store results
-    // double avg_costs[16][2]; // Original size for multiple algorithms
-    // int min_costs[16][2];
-    // int max_costs[16][2];
+    int num_solutions_delta = 200;    // For DeltaLocalSearch
+    int num_solutions_msls = 200;     // For MSLS
+    // ILS uses time-based stopping condition
 
     // Loop over algorithms and files
     for(int a = 0; a < num_algorithms; a++) {
@@ -102,8 +88,17 @@ int main(int argc, char* argv[]) {
             printf("## File: %s\n", files[f]);
 
             // Determine number of solutions based on algorithm
-            // int num_solutions = num_solutions_others;
-            int num_solutions = num_solutions_delta;
+            int num_solutions = 0;
+            if(strcmp(algorithms[a]->name, "MultipleStartLocalSearch") == 0) {
+                num_solutions = num_solutions_msls;
+            }
+            else if(strcmp(algorithms[a]->name, "IteratedLocalSearch") == 0) {
+                // ILS uses time-based stopping condition, num_solutions can be set to 0 or ignored
+                num_solutions = 0;
+            }
+            else {
+                num_solutions = num_solutions_delta;
+            }
 
             // Start timing before the solve function
             struct timespec start_time, end_time;
@@ -112,7 +107,7 @@ int main(int argc, char* argv[]) {
                 // Handle error, possibly continue without timing
             }
 
-            // Solve using the DeltaLocalSearch algorithm
+            // Solve using the current algorithm
             Result res = algorithms[a]->solve(algorithms[a], (const int**)distances, num_nodes, costs, num_solutions);
 
             // End timing after the solve function
@@ -153,11 +148,6 @@ int main(int argc, char* argv[]) {
                    algorithms[a]->name, files[f], elapsed_ms, elapsed_sec);
             printf("----------------------------------------\n");
 
-            // Store results for summary
-            // avg_costs[a][f] = res.averageCost;
-            // min_costs[a][f] = res.bestCost;
-            // max_costs[a][f] = res.worstCost;
-
             // Free allocated memory for this file
             free_Result(res);
             free(costs);
@@ -167,21 +157,11 @@ int main(int argc, char* argv[]) {
     }
 
     // Print the summary table
-    // printf("\nSummary Results:\n");
-    // printf("Method\t\t\t\tTSPA\t\t\t\tTSPB\n");
-    // printf("\t\t\t\tav (min - max)\t\t\tav (min - max)\n");
-    // for(int a = 0; a < num_algorithms; a++) {
-    //     printf("%s\t%.2f (%d - %d)\t\t%.2f (%d - %d)\n", algorithms[a]->name,
-    //            avg_costs[a][0], min_costs[a][0], max_costs[a][0],
-    //            avg_costs[a][1], min_costs[a][1], max_costs[a][1]);
-    // }
+    // (Implementation depends on how you want to store and display results)
 
     // Free algorithm instances
     for(int i = 0; i < num_algorithms; i++) {
-        // if (i >= 6 && i < num_algorithms) {
-        //     // For LocalSearch and DeltaLocalSearch algorithms, free the allocated name
-        //     free((void*)algorithms[i]->name);
-        // }
+        free((void*)algorithms[i]->name);
         free(algorithms[i]);
     }
 

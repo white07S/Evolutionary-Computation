@@ -17,4 +17,7 @@ typedef struct
 // Function to create a LocalSearch algorithm
 LocalSearch* create_LocalSearch(int local_search_type, int intra_route_move_type, int starting_solution_type, int method_index);
 
+Result perform_local_search(int* current_solution, int solution_size, const int** distances, const int* costs, int num_nodes);
+
+
 #endif // LOCAL_SEARCH_H
