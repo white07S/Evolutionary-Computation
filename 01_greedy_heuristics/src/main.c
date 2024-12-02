@@ -8,7 +8,7 @@
 #include "delta_local_search.h"
 #include "msls.h"        // Include MSLS header
 #include "ils.h"         // Include ILS header
-#include <linux/time.h>
+#include <time.h>
 
 // Function to calculate elapsed time in milliseconds
 double get_elapsed_time_ms(struct timespec start, struct timespec end) {
@@ -41,7 +41,7 @@ int main(int argc, char* argv[]) {
     // Assuming average running time of MSLS is approximated as 200 iterations
     // Set max_time_ms accordingly, e.g., 200 * average time per iteration
     // For simplicity, set a fixed time or adjust as needed
-    algorithms[2] = (Algo*)create_ILS(10000, 5); // 10 seconds and perturbation strength of 5
+    algorithms[2] = (Algo*)create_ILS(172, 5); // 172ms (the average time of 20 runs of MSLS), perturbation strength of 5
 
     // List of files to process
     const char* files[] = {"data/TSPA.csv", "data/TSPB.csv"};

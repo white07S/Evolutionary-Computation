@@ -8,7 +8,7 @@
 // Include necessary headers for local search
 #include "local_search.h"
 #include "utils.h"
-#include <linux/time.h>
+#include <time.h>
 
 
 /**
@@ -121,113 +121,122 @@ static Result ILS_solve(Algo *algo, const int **distances, int num_nodes, const 
     int worstSolutionSize = 0;
 
     // Initialize timer
-    long long start_time = current_time_ms();
-    long long end_time = start_time + ils->max_time_ms;
 
-    // Generate initial random solution
-    int* current_solution = (int*)malloc(solution_size * sizeof(int));
-    if (!current_solution)
-    {
-        fprintf(stderr, "Error: Memory allocation failed in ILS_solve\n");
-        Result res = {INT_MAX, INT_MIN, 0.0, NULL, 0, NULL, 0};
-        return res;
-    }
 
-    int* all_nodes = (int*)malloc(num_nodes * sizeof(int));
-    if (!all_nodes)
-    {
-        fprintf(stderr, "Error: Memory allocation failed in ILS_solve\n");
-        free(current_solution);
-        Result res = {INT_MAX, INT_MIN, 0.0, NULL, 0, NULL, 0};
-        return res;
-    }
-
-    for (int i = 0; i < num_nodes; i++)
-    {
-        all_nodes[i] = i;
-    }
-
-    shuffle_array(all_nodes, num_nodes);
-    memcpy(current_solution, all_nodes, solution_size * sizeof(int));
-    free(all_nodes);
-
-    // Perform initial local search
-    Result local_res = perform_local_search(current_solution, solution_size, distances, costs, num_nodes);
-    iterations++;
-
-    // Update best and worst
-    totalCost += local_res.bestCost;
-    if (local_res.bestCost < bestCost)
-    {
-        bestCost = local_res.bestCost;
-        if (bestSolution)
-            free(bestSolution);
-        bestSolution = (int*)malloc(solution_size * sizeof(int));
-        if (bestSolution)
+    for (int iter = 0; iter < 20; iter++) {
+        // Generate initial random solution
+        int* current_solution = (int*)malloc(solution_size * sizeof(int));
+        if (!current_solution)
         {
-            memcpy(bestSolution, local_res.bestSolution, solution_size * sizeof(int));
-            bestSolutionSize = solution_size;
+            fprintf(stderr, "Error: Memory allocation failed in ILS_solve\n");
+            Result res = {INT_MAX, INT_MIN, 0.0, NULL, 0, NULL, 0};
+            return res;
         }
-    }
-    if (local_res.bestCost > worstCost)
-    {
-        worstCost = local_res.bestCost;
-        if (worstSolution)
-            free(worstSolution);
-        worstSolution = (int*)malloc(solution_size * sizeof(int));
-        if (worstSolution)
+
+        int* all_nodes = (int*)malloc(num_nodes * sizeof(int));
+        if (!all_nodes)
         {
-            memcpy(worstSolution, local_res.worstSolution, solution_size * sizeof(int));
-            worstSolutionSize = solution_size;
+            fprintf(stderr, "Error: Memory allocation failed in ILS_solve\n");
+            free(current_solution);
+            Result res = {INT_MAX, INT_MIN, 0.0, NULL, 0, NULL, 0};
+            return res;
         }
-    }
 
-    free(local_res.bestSolution);
-    free(local_res.worstSolution);
+        for (int i = 0; i < num_nodes; i++)
+        {
+            all_nodes[i] = i;
+        }
 
-    // Iteratively perform perturbation and local search
-    while (current_time_ms() < end_time)
-    {
-        // Perturb the current solution
-        perturb_solution(current_solution, solution_size, ils->perturbation_strength);
+        shuffle_array(all_nodes, num_nodes);
+        memcpy(current_solution, all_nodes, solution_size * sizeof(int));
+        free(all_nodes);
 
-        // Perform local search on the perturbed solution
-        Result perturbed_res = perform_local_search(current_solution, solution_size, distances, costs, num_nodes);
+        
+        // Perform initial local search
+        Result local_res = perform_local_search(current_solution, solution_size, distances, costs, num_nodes);
         iterations++;
 
         // Update best and worst
-        totalCost += perturbed_res.bestCost;
-        if (perturbed_res.bestCost < bestCost)
+        totalCost += local_res.bestCost;
+        if (local_res.bestCost < bestCost)
         {
-            bestCost = perturbed_res.bestCost;
+            bestCost = local_res.bestCost;
             if (bestSolution)
                 free(bestSolution);
             bestSolution = (int*)malloc(solution_size * sizeof(int));
             if (bestSolution)
             {
-                memcpy(bestSolution, perturbed_res.bestSolution, solution_size * sizeof(int));
+                memcpy(bestSolution, local_res.bestSolution, solution_size * sizeof(int));
                 bestSolutionSize = solution_size;
             }
         }
-        if (perturbed_res.bestCost > worstCost)
+        if (local_res.bestCost > worstCost)
         {
-            worstCost = perturbed_res.bestCost;
+            worstCost = local_res.bestCost;
             if (worstSolution)
                 free(worstSolution);
             worstSolution = (int*)malloc(solution_size * sizeof(int));
             if (worstSolution)
             {
-                memcpy(worstSolution, perturbed_res.worstSolution, solution_size * sizeof(int));
+                memcpy(worstSolution, local_res.worstSolution, solution_size * sizeof(int));
                 worstSolutionSize = solution_size;
             }
         }
 
-        free(perturbed_res.bestSolution);
-        free(perturbed_res.worstSolution);
+        free(local_res.bestSolution);
+        free(local_res.worstSolution);
+
+        long long start_time = current_time_ms();
+        long long end_time = start_time + ils->max_time_ms;
+
+        // Iteratively perform perturbation and local search
+        while (current_time_ms() < end_time)
+        {
+            // Perturb the current solution
+            perturb_solution(current_solution, solution_size, ils->perturbation_strength);
+            
+
+            // Perform local search on the perturbed solution
+            Result perturbed_res = perform_local_search(current_solution, solution_size, distances, costs, num_nodes);
+            iterations++;
+
+
+
+            // Update best and worst
+            totalCost += perturbed_res.bestCost;
+            if (perturbed_res.bestCost < bestCost)
+            {
+                bestCost = perturbed_res.bestCost;
+                if (bestSolution)
+                    free(bestSolution);
+                bestSolution = (int*)malloc(solution_size * sizeof(int));
+                if (bestSolution)
+                {
+                    memcpy(bestSolution, perturbed_res.bestSolution, solution_size * sizeof(int));
+                    bestSolutionSize = solution_size;
+                }
+            }
+            if (perturbed_res.bestCost > worstCost)
+            {
+                worstCost = perturbed_res.bestCost;
+                if (worstSolution)
+                    free(worstSolution);
+                worstSolution = (int*)malloc(solution_size * sizeof(int));
+                if (worstSolution)
+                {
+                    memcpy(worstSolution, perturbed_res.worstSolution, solution_size * sizeof(int));
+                    worstSolutionSize = solution_size;
+                }
+            }
+
+            free(perturbed_res.bestSolution);
+            free(perturbed_res.worstSolution);
+        }
+        free(current_solution);
     }
 
     double averageCost = (iterations > 0) ? ((double)totalCost / iterations) : 0.0;
-
+    printf("iterations: %d\n", iterations);
     Result res;
     res.bestCost = bestCost;
     res.worstCost = worstCost;
@@ -237,7 +246,6 @@ static Result ILS_solve(Algo *algo, const int **distances, int num_nodes, const 
     res.worstSolution = worstSolution;
     res.worstSolutionSize = worstSolutionSize;
 
-    free(current_solution);
 
     return res;
 }
