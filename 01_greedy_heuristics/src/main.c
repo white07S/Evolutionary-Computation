@@ -8,7 +8,7 @@
 #include "delta_local_search.h"
 #include "msls.h"        // Include MSLS header
 #include "ils.h"         // Include ILS header
-#include <linux/time.h>
+#include <time.h>
 
 // Function to calculate elapsed time in milliseconds
 double get_elapsed_time_ms(struct timespec start, struct timespec end) {

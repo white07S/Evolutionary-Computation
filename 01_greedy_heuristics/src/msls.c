@@ -69,7 +69,7 @@ static Result MSLS_solve(Algo *algo, const int **distances, int num_nodes, const
     int worstSolutionSize = 0;
 
     // Iterate for the specified number of solutions
-    for (int iter = 0; iter < num_solutions; iter++)
+    for (int iter = 0; iter < num_solutions*20; iter++)
     {
         // Generate a random starting solution
         int* current_solution = (int*)malloc(solution_size * sizeof(int));
