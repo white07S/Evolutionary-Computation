@@ -5,13 +5,15 @@
 #include "algorithms.h"
 
 // Define DeltaLocalSearch struct
-typedef struct
-{
+// delta_local_search.h
+typedef struct {
     Algo base;
-    int method_index; // For identification purposes
+    int method_index;
+    int* initial_solution;       // Pointer to the initial solution
+    int initial_solution_size;   // Size of the initial solution
 } DeltaLocalSearch;
 
 // Function to create a DeltaLocalSearch algorithm
-DeltaLocalSearch* create_DeltaLocalSearch(int method_index);
+DeltaLocalSearch* create_DeltaLocalSearch(int method_index, int* initial_solution, int initial_solution_size);
 
 #endif // DELTA_LOCAL_SEARCH_H
