@@ -39,7 +39,8 @@ static void free_pq(PriorityQueue* pq);
 static void insert_move_pq(PriorityQueue* pq, Move* move);
 static Move* extract_min_move_pq(PriorityQueue* pq);
 
-DeltaLocalSearch* create_DeltaLocalSearch(int method_index)
+// delta_local_search.c
+DeltaLocalSearch* create_DeltaLocalSearch(int method_index, int* initial_solution, int initial_solution_size)
 {
     DeltaLocalSearch* dls = (DeltaLocalSearch*)malloc(sizeof(DeltaLocalSearch));
     if (!dls)
@@ -60,13 +61,19 @@ DeltaLocalSearch* create_DeltaLocalSearch(int method_index)
     dls->base.name = name;
     dls->base.solve = DeltaLocalSearch_solve;
     dls->method_index = method_index;
+
+    // Initialize with the provided solution
+    dls->initial_solution = initial_solution;
+    dls->initial_solution_size = initial_solution_size;
+
     return dls;
 }
 
+// delta_local_search.c
 static Result DeltaLocalSearch_solve(Algo *algo, const int **distances, int num_nodes, const int *costs, int num_solutions)
 {
     DeltaLocalSearch* dls = (DeltaLocalSearch*)algo;
-    int solution_size = (num_nodes + 1) / 2; // Round up to select 50% of the nodes
+    int solution_size = dls->initial_solution_size; // Use the provided solution size
 
     int total_iterations = num_solutions;
     int bestCost = INT_MAX;
@@ -78,10 +85,10 @@ static Result DeltaLocalSearch_solve(Algo *algo, const int **distances, int num_
     int* worstSolution = NULL;
     int worstSolutionSize = 0;
 
-    // For num_solutions iterations
+    // Iterate over the number of solutions (typically 1 in this context)
     for (int iter = 0; iter < num_solutions; iter++)
     {
-        // Generate random starting solution
+        // Use the provided initial solution
         int* current_solution = (int*)malloc(solution_size * sizeof(int));
         if (!current_solution)
         {
@@ -89,23 +96,7 @@ static Result DeltaLocalSearch_solve(Algo *algo, const int **distances, int num_
             Result res = {INT_MAX, INT_MIN, 0.0, NULL, 0, NULL, 0};
             return res;
         }
-        // Random starting solution
-        int* all_nodes = (int*)malloc(num_nodes * sizeof(int));
-        if (!all_nodes)
-        {
-            fprintf(stderr, "Error: Memory allocation failed in DeltaLocalSearch_solve\n");
-            free(current_solution);
-            Result res = {INT_MAX, INT_MIN, 0.0, NULL, 0, NULL, 0};
-            return res;
-        }
-        for (int i = 0; i < num_nodes; i++)
-        {
-            all_nodes[i] = i;
-        }
-        // Use shuffle_array from utils.h
-        shuffle_array(all_nodes, num_nodes);
-        memcpy(current_solution, all_nodes, solution_size * sizeof(int));
-        free(all_nodes);
+        memcpy(current_solution, dls->initial_solution, solution_size * sizeof(int));
 
         // Prepare a boolean array for fast checking if a node is in the solution
         char* in_solution = (char*)calloc(num_nodes, sizeof(char));
@@ -148,7 +139,7 @@ static Result DeltaLocalSearch_solve(Algo *algo, const int **distances, int num_
         PriorityQueue LM;
         init_pq(&LM, 1000); // Initial capacity
 
-        // Perform steepest local search with LM
+        // Calculate the initial cost of the current solution
         int current_cost = calculate_cost(current_solution, solution_size, distances, costs);
 
         int found_improving_move = 0;
@@ -270,6 +261,7 @@ static Result DeltaLocalSearch_solve(Algo *algo, const int **distances, int num_
 
     return res;
 }
+
 
 static void init_pq(PriorityQueue* pq, int capacity)
 {
