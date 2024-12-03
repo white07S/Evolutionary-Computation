@@ -24,24 +24,57 @@ double get_elapsed_time_sec(struct timespec start, struct timespec end) {
     return end_sec - start_sec;
 }
 
+// Function to generate an initial solution
+// This example generates a random solution by selecting 'solution_size' unique nodes
+int* generate_initial_solution(int num_nodes, int solution_size) {
+    if (solution_size > num_nodes) {
+        fprintf(stderr, "Error: Solution size cannot exceed the number of nodes.\n");
+        return NULL;
+    }
+
+    int* all_nodes = (int*)malloc(num_nodes * sizeof(int));
+    if (!all_nodes) {
+        fprintf(stderr, "Error: Memory allocation failed for all_nodes.\n");
+        return NULL;
+    }
+
+    for (int i = 0; i < num_nodes; i++) {
+        all_nodes[i] = i;
+    }
+
+    // Shuffle the array
+    shuffle_array(all_nodes, num_nodes);
+
+    // Select the first 'solution_size' nodes as the initial solution
+    int* initial_solution = (int*)malloc(solution_size * sizeof(int));
+    if (!initial_solution) {
+        fprintf(stderr, "Error: Memory allocation failed for initial_solution.\n");
+        free(all_nodes);
+        return NULL;
+    }
+
+    memcpy(initial_solution, all_nodes, solution_size * sizeof(int));
+    free(all_nodes);
+
+    return initial_solution;
+}
+
 int main(int argc, char* argv[]) {
     // Initialize random seed
     srand((unsigned int)time(NULL));
 
-    // Create algorithm instances
-    // Adjust the number of algorithms and their initialization as needed
-    int num_algorithms = 3; // Example: RandomSearch, MSLS, ILS
-    Algo* algorithms[3];
+    // Define the number of algorithms excluding DeltaLocalSearch
+    int num_other_algorithms = 2; // MSLS and ILS
+    Algo* algorithms[num_other_algorithms];
 
-    // Initialize DeltaLocalSearch as MSLS
-    algorithms[0] = (Algo*)create_DeltaLocalSearch(0); // Existing DeltaLocalSearch
     // Initialize Multiple Start Local Search
-    algorithms[1] = (Algo*)create_MSLS(200); // 200 iterations as per requirement
+    algorithms[0] = (Algo*)create_MSLS(200); // 200 iterations as per requirement
+
     // Initialize Iterated Local Search
     // Assuming average running time of MSLS is approximated as 200 iterations
     // Set max_time_ms accordingly, e.g., 200 * average time per iteration
     // For simplicity, set a fixed time or adjust as needed
-    algorithms[2] = (Algo*)create_ILS(10000, 5); // 10 seconds and perturbation strength of 5
+    algorithms[1] = (Algo*)create_ILS(10000, 5); // 10 seconds and perturbation strength of 5
 
     // List of files to process
     const char* files[] = {"data/TSPA.csv", "data/TSPB.csv"};
@@ -52,51 +85,83 @@ int main(int argc, char* argv[]) {
     int num_solutions_msls = 200;     // For MSLS
     // ILS uses time-based stopping condition
 
-    // Loop over algorithms and files
-    for(int a = 0; a < num_algorithms; a++) {
-        for(int f = 0; f < num_files; f++) {
-            // Read data from file
-            int num_nodes = 0;
-            int** data = read_file(files[f], &num_nodes);
-            if(!data || num_nodes == 0) {
-                fprintf(stderr, "Error: No data found in file %s\n", files[f]);
-                continue;
-            }
+    // Loop over files
+    for(int f = 0; f < num_files; f++) {
+        // Read data from file
+        int num_nodes = 0;
+        int** data = read_file(files[f], &num_nodes);
+        if(!data || num_nodes == 0) {
+            fprintf(stderr, "Error: No data found in file %s\n", files[f]);
+            continue;
+        }
 
-            // Calculate distances
-            int** distances = calcDistances(data, num_nodes);
-            if(!distances) {
-                fprintf(stderr, "Error: Failed to calculate distances for file %s\n", files[f]);
-                free_data(data, num_nodes);
-                continue;
-            }
+        // Calculate distances
+        int** distances = calcDistances(data, num_nodes);
+        if(!distances) {
+            fprintf(stderr, "Error: Failed to calculate distances for file %s\n", files[f]);
+            free_data(data, num_nodes);
+            continue;
+        }
 
-            // Extract costs
-            int* costs = (int*)malloc(num_nodes * sizeof(int));
-            if(!costs) {
-                fprintf(stderr, "Error: Memory allocation failed for costs in file %s\n", files[f]);
-                free_data(data, num_nodes);
-                free_distances(distances, num_nodes);
-                continue;
-            }
-            for(int i = 0; i < num_nodes; i++) {
-                costs[i] = data[i][2];
-            }
+        // Extract costs
+        int* costs = (int*)malloc(num_nodes * sizeof(int));
+        if(!costs) {
+            fprintf(stderr, "Error: Memory allocation failed for costs in file %s\n", files[f]);
+            free_data(data, num_nodes);
+            free_distances(distances, num_nodes);
+            continue;
+        }
+        for(int i = 0; i < num_nodes; i++) {
+            costs[i] = data[i][2];
+        }
 
+        // Generate initial solution
+        int solution_size = (num_nodes + 1) / 2; // Example: selecting 50% of the nodes
+        int* initial_solution = generate_initial_solution(num_nodes, solution_size);
+        if (!initial_solution) {
+            fprintf(stderr, "Error: Failed to generate initial solution for file %s\n", files[f]);
+            free(costs);
+            free_data(data, num_nodes);
+            free_distances(distances, num_nodes);
+            continue;
+        }
+
+        // Create a temporary DeltaLocalSearch instance with the initial solution
+        DeltaLocalSearch* dls = create_DeltaLocalSearch(0, initial_solution, solution_size);
+        if (!dls) {
+            fprintf(stderr, "Error: Failed to create DeltaLocalSearch for file %s\n", files[f]);
+            free(initial_solution);
+            free(costs);
+            free_data(data, num_nodes);
+            free_distances(distances, num_nodes);
+            continue;
+        }
+
+        // Add DeltaLocalSearch to the list of algorithms for this iteration
+        // Since algorithms array was initially defined for other algorithms,
+        // we'll temporarily expand it to include DeltaLocalSearch
+        int current_num_algorithms = num_other_algorithms + 1;
+        Algo* current_algorithms[current_num_algorithms];
+        current_algorithms[0] = (Algo*)dls; // DeltaLocalSearch
+        current_algorithms[1] = algorithms[0]; // MSLS
+        current_algorithms[2] = algorithms[1]; // ILS
+
+        // Print algorithm and file information
+        for(int a = 0; a < current_num_algorithms; a++) {
             // Print algorithm and file information
-            printf("# Algorithm: %s\n", algorithms[a]->name);
+            printf("# Algorithm: %s\n", current_algorithms[a]->name);
             printf("## File: %s\n", files[f]);
 
             // Determine number of solutions based on algorithm
             int num_solutions = 0;
-            if(strcmp(algorithms[a]->name, "MultipleStartLocalSearch") == 0) {
+            if(strcmp(current_algorithms[a]->name, "MultipleStartLocalSearch") == 0) {
                 num_solutions = num_solutions_msls;
             }
-            else if(strcmp(algorithms[a]->name, "IteratedLocalSearch") == 0) {
+            else if(strcmp(current_algorithms[a]->name, "IteratedLocalSearch") == 0) {
                 // ILS uses time-based stopping condition, num_solutions can be set to 0 or ignored
                 num_solutions = 0;
             }
-            else {
+            else { // Assuming it's DeltaLocalSearch
                 num_solutions = num_solutions_delta;
             }
 
@@ -108,7 +173,7 @@ int main(int argc, char* argv[]) {
             }
 
             // Solve using the current algorithm
-            Result res = algorithms[a]->solve(algorithms[a], (const int**)distances, num_nodes, costs, num_solutions);
+            Result res = current_algorithms[a]->solve(current_algorithms[a], (const int**)distances, num_nodes, costs, num_solutions);
 
             // End timing after the solve function
             if(clock_gettime(CLOCK_MONOTONIC, &end_time) != 0) {
@@ -142,25 +207,31 @@ int main(int argc, char* argv[]) {
                 *dot = '\0';
             }
 
-            snprintf(result_filename, sizeof(result_filename), "%s_%s_result.txt", algorithms[a]->name, base_name);
+            snprintf(result_filename, sizeof(result_filename), "%s_%s_result.txt", current_algorithms[a]->name, base_name);
             write_Result_to_file(res, result_filename, (const int**)distances, costs);
             printf("Time taken by %s on %s: %.3f ms (%.3f seconds)\n",
-                   algorithms[a]->name, files[f], elapsed_ms, elapsed_sec);
+                   current_algorithms[a]->name, files[f], elapsed_ms, elapsed_sec);
             printf("----------------------------------------\n");
 
-            // Free allocated memory for this file
+            // Free allocated memory for the result
             free_Result(res);
-            free(costs);
-            free_data(data, num_nodes);
-            free_distances(distances, num_nodes);
         }
+
+        // Free the temporary DeltaLocalSearch instance
+        free(dls->base.name);
+        free(dls);
+
+        // Free initial_solution as it's copied inside DeltaLocalSearch
+        free(initial_solution);
+
+        // Free allocated memory for this file
+        free(costs);
+        free_data(data, num_nodes);
+        free_distances(distances, num_nodes);
     }
 
-    // Print the summary table
-    // (Implementation depends on how you want to store and display results)
-
-    // Free algorithm instances
-    for(int i = 0; i < num_algorithms; i++) {
+    // Free other algorithm instances
+    for(int i = 0; i < num_other_algorithms; i++) {
         free((void*)algorithms[i]->name);
         free(algorithms[i]);
     }

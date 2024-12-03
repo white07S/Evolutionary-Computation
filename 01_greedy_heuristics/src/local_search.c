@@ -641,10 +641,32 @@ static void generate_Greedy2Regret_solution(int start_node, const int **distance
     free(visited);
 }
 
+// Result perform_local_search(int* current_solution, int solution_size, const int** distances, const int* costs, int num_nodes)
+// {
+//     // Create a temporary DeltaLocalSearch instance
+//     DeltaLocalSearch* dls = create_DeltaLocalSearch(0);
+//     if (!dls)
+//     {
+//         fprintf(stderr, "Error: Failed to create DeltaLocalSearch for local search\n");
+//         Result res = {INT_MAX, INT_MIN, 0.0, NULL, 0, NULL, 0};
+//         return res;
+//     }
+
+//     // Perform local search with 1 solution (since we're handling it manually)
+//     Result res = dls->base.solve((Algo*)dls, distances, num_nodes, costs, 1);
+
+//     // Free the DeltaLocalSearch instance
+//     free(dls->base.name);
+//     free(dls);
+
+//     return res;
+// }
+
+// main.c or relevant file
 Result perform_local_search(int* current_solution, int solution_size, const int** distances, const int* costs, int num_nodes)
 {
-    // Create a temporary DeltaLocalSearch instance
-    DeltaLocalSearch* dls = create_DeltaLocalSearch(0);
+    // Create a temporary DeltaLocalSearch instance with the current solution
+    DeltaLocalSearch* dls = create_DeltaLocalSearch(0, current_solution, solution_size);
     if (!dls)
     {
         fprintf(stderr, "Error: Failed to create DeltaLocalSearch for local search\n");
@@ -652,7 +674,7 @@ Result perform_local_search(int* current_solution, int solution_size, const int*
         return res;
     }
 
-    // Perform local search with 1 solution (since we're handling it manually)
+    // Perform local search with 1 solution (the provided current_solution)
     Result res = dls->base.solve((Algo*)dls, distances, num_nodes, costs, 1);
 
     // Free the DeltaLocalSearch instance
