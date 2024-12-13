@@ -1,456 +1,455 @@
 #include "LocalSearchSolver.h"
-#include "RandomSolution.h"
+#include "Solution.h"
+#include "Utils.h"
 
-#include <algorithm>
-#include <numeric>
+#include <string>
+#include <cstdlib>
+#include <set>
 #include <iostream>
 #include <limits>
 #include <random>
-#include <chrono>
+#include <numeric>
+#include <algorithm>
 
-namespace LS {
+using namespace std;
+using namespace N;
 
-    LocalSearchSolver::LocalSearchSolver(const std::string& instanceFilename, double fractionNodes, const Solution& initialSolution)
-        : BaseSolver(instanceFilename, fractionNodes), bestSolution(initialSolution)
+LocalSearchSolver::LocalSearchSolver(string instance_filename, double fraction_nodes, Solution initial_solution)
+    : ProblemSolver(instance_filename, fraction_nodes)
+{
+    this->best_solution = initial_solution;
+    this->best_solution.set_nodes(initial_solution.get_nodes());
+    this->best_solution.set_selected(initial_solution.get_selected());
+    this->best_sol_evaluation = this->best_solution.evaluate(&this->dist_mat, &this->costs);
+
+    vector<int> iterator1(this->best_solution.get_number_of_nodes());
+    iota(iterator1.begin(), iterator1.end(), 0);
+    this->iterator1 = iterator1;
+
+    vector<int> iterator2(this->best_solution.get_number_of_nodes());
+    iota(iterator2.begin(), iterator2.end(), 0);
+    this->iterator2 = iterator2;
+
+    vector<int> iterator_long(this->total_nodes);
+    iota(iterator_long.begin(), iterator_long.end(), 0);
+    this->iterator_long = iterator_long;
+}
+
+void LocalSearchSolver::set_initial_solution(Solution *new_initial_solution)
+{
+
+    this->best_solution = *new_initial_solution;
+    this->best_sol_evaluation = this->best_solution.evaluate(&this->dist_mat, &this->costs);
+}
+
+void LocalSearchSolver::set_initial_solution_copy(Solution new_initial_solution)
+{
+    this->best_solution = new_initial_solution;
+    this->best_solution.set_nodes(new_initial_solution.get_nodes());
+    this->best_solution.set_selected(new_initial_solution.get_selected());
+    this->best_sol_evaluation = this->best_solution.evaluate(&this->dist_mat, &this->costs);
+}
+
+void LocalSearchSolver::run_basic(string neigh_method, string search_method)
+{
+    int current_best_delta = -1;
+    int best_inter_delta, best_intra_nodes_delta, best_intra_edges_delta;
+
+    int arg1, arg2, temp_arg1, temp_arg2;
+    string move_type;
+
+    typedef void (LocalSearchSolver::*VoidFunctionFourParams)(int *, int *, int *, string);
+    vector<VoidFunctionFourParams> neigh_methods;
+    neigh_methods = {&LocalSearchSolver::find_best_inter_neighbor,
+                     &LocalSearchSolver::find_best_intra_neighbor_nodes,
+                     &LocalSearchSolver::find_best_intra_neighbor_edges};
+
+    vector<string> move_types = {"inter", "intra_nodes", "intra_edges"};
+
+    vector<int> neigh_methods_idxs = {0};
+
+    int method_idx = 0;
+    if (neigh_method == "TWO_NODES")
     {
-        bestSolution.setNodes(initialSolution.getNodes());
-        bestSolution.setSelectedNodes(initialSolution.getSelectedNodes());
-        bestSolutionEvaluation = bestSolution.evaluate(distanceMatrix, costs);
-
-        iterator1.reserve(bestSolution.getNumberOfNodes());
-        iterator1.resize(bestSolution.getNumberOfNodes());
-        std::iota(iterator1.begin(), iterator1.end(), 0);
-
-        iterator2.reserve(bestSolution.getNumberOfNodes());
-        iterator2.resize(bestSolution.getNumberOfNodes());
-        std::iota(iterator2.begin(), iterator2.end(), 0);
-
-        iteratorLong.reserve(totalNodes);
-        iteratorLong.resize(totalNodes);
-        std::iota(iteratorLong.begin(), iteratorLong.end(), 0);
-
-        std::random_device rd;
-        rng.seed(rd());
+        method_idx = 1;
+    }
+    if (neigh_method == "TWO_EDGES")
+    {
+        method_idx = 2;
     }
 
-    void LocalSearchSolver::reset()
+    if (rand() % 2 == 1)
     {
-        // Set new random solution
-        RandomSolution newInitialSolution;
-        newInitialSolution.generate(totalNodes, numNodes);
-        bestSolution = newInitialSolution;
-        bestSolution.setNodes(newInitialSolution.getNodes());
-        bestSolution.setSelectedNodes(newInitialSolution.getSelectedNodes());
-
-        bestSolutionEvaluation = bestSolution.evaluate(distanceMatrix, costs);
+        neigh_methods_idxs.push_back(method_idx);
+    }
+    else
+    {
+        neigh_methods_idxs.insert(neigh_methods_idxs.begin(), method_idx);
     }
 
-    void LocalSearchSolver::setInitialSolution(const Solution& newInitialSolution)
+    while (current_best_delta < 0)
     {
-        bestSolution = newInitialSolution;
-        bestSolutionEvaluation = bestSolution.evaluate(distanceMatrix, costs);
-    }
 
-    void LocalSearchSolver::setInitialSolutionCopy(const Solution& newInitialSolution)
-    {
-        bestSolution = newInitialSolution;
-        bestSolution.setNodes(newInitialSolution.getNodes());
-        bestSolution.setSelectedNodes(newInitialSolution.getSelectedNodes());
-        bestSolutionEvaluation = bestSolution.evaluate(distanceMatrix, costs);
-    }
+        current_best_delta = 0;
 
-    void LocalSearchSolver::writeBestToCSV(const std::string& filename)
-    {
-        bestSolution.writeToCSV(filename);
-    }
-
-    int LocalSearchSolver::getBestSolutionEval() const
-    {
-        return bestSolutionEvaluation;
-    }
-
-    std::vector<int> LocalSearchSolver::getBestSolution() const
-    {
-        return bestSolution.getNodes();
-    }
-
-    Solution LocalSearchSolver::getBestFullSolution() const
-    {
-        return bestSolution;
-    }
-
-    Solution* LocalSearchSolver::getBestSolutionPtr()
-    {
-        return &bestSolution;
-    }
-
-    void LocalSearchSolver::perturbBestSolution(int n)
-    {
-        std::uniform_int_distribution<int> distEdge(0, 99); // Assuming 100 edges
-        for (int i = 0; i < n; ++i)
+        for (auto &i : neigh_methods_idxs)
         {
-            int edge1 = 0;
-            int edge2 = 0;
-            while (std::abs(edge1 - edge2) < 2)
+            (this->*neigh_methods[i])(&best_inter_delta, &temp_arg1, &temp_arg2, search_method);
+            if (best_inter_delta < current_best_delta)
             {
-                edge1 = distEdge(rng);
-                edge2 = distEdge(rng);
-                if (edge1 > edge2)
+                arg1 = temp_arg1;
+                arg2 = temp_arg2;
+                move_type = move_types[i];
+                current_best_delta = best_inter_delta;
+                if (search_method == "GREEDY")
                 {
-                    std::swap(edge1, edge2);
-                }
-            }
-            int delta = bestSolution.calculateDeltaIntraRouteEdges(distanceMatrix, edge1, edge2);
-            bestSolutionEvaluation += delta;
-            bestSolution.exchangeTwoEdges(edge1, edge2);
-        }
-    }
-
-    void LocalSearchSolver::destroyAndRepairBestSolution()
-    {
-        // Destroy
-        int destroySequencesAmount = (rng() % 4) + 2;
-        int length = bestSolution.getNumberOfNodes() / (4 * destroySequencesAmount);
-
-        for (int idx = 0; idx < destroySequencesAmount; ++idx)
-        {
-            std::uniform_int_distribution<int> distIndex(0, bestSolution.getNumberOfNodes() - length);
-            int indexF = distIndex(rng);
-            bestSolution.removeNodes(indexF, length);
-        }
-
-        // Repair
-        std::vector<int> tmpSol;
-        greedyCycleRepair(tmpSol);
-
-        bestSolution.setNodes(tmpSol);
-        bestSolution.updateSelectedNodes();
-        bestSolutionEvaluation = bestSolution.evaluate(distanceMatrix, costs);
-    }
-
-    void LocalSearchSolver::destroyAndRepairBestSolutionV2()
-    {
-        // Similar to destroyAndRepairBestSolution with slight variations
-        int destroySequencesAmount = (rng() % 3) + 2;
-        int length = bestSolution.getNumberOfNodes() / (4 * destroySequencesAmount);
-
-        for (int idx = 0; idx < destroySequencesAmount; ++idx)
-        {
-            std::uniform_int_distribution<int> distIndex(0, bestSolution.getNumberOfNodes() - length);
-            int indexF = distIndex(rng);
-            bestSolution.removeNodes(indexF, length);
-        }
-
-        // Repair
-        std::vector<int> tmpSol;
-        greedyCycleRepair(tmpSol);
-
-        bestSolution.setNodes(tmpSol);
-        bestSolution.updateSelectedNodes();
-        bestSolutionEvaluation = bestSolution.evaluate(distanceMatrix, costs);
-    }
-
-    void LocalSearchSolver::greedyCycleRepair(std::vector<int>& correctOrderNodes)
-    {
-        std::vector<std::vector<int>> edges;
-        const auto& nodes = bestSolution.getNodes();
-        for (size_t idx = 0; idx < nodes.size() - 1; idx++)
-        {
-            edges.emplace_back(std::vector<int>{nodes[idx], nodes[idx + 1]});
-        }
-        edges.emplace_back(std::vector<int>{nodes.back(), nodes[0]});
-
-        while (bestSolution.getNumberOfNodes() < numNodes)
-        {
-            int nodeToAddIdx = -1;
-            int edgeToRemoveIdx = -1;
-            int minTotalCost = std::numeric_limits<int>::max();
-
-            for (size_t nodeIdx = 0; nodeIdx < distanceMatrix.size(); nodeIdx++)
-            {
-                if (!bestSolution.contains(nodeIdx))
-                {
-                    for (size_t edgeIdx = 0; edgeIdx < edges.size(); edgeIdx++)
-                    {
-                        int node1 = edges[edgeIdx][0];
-                        int node2 = edges[edgeIdx][1];
-
-                        int totalCost = distanceMatrix[node1][nodeIdx] +
-                                        distanceMatrix[node2][nodeIdx] -
-                                        distanceMatrix[node1][node2] + costs[nodeIdx];
-
-                        if (totalCost < minTotalCost)
-                        {
-                            minTotalCost = totalCost;
-                            edgeToRemoveIdx = edgeIdx;
-                            nodeToAddIdx = nodeIdx;
-                        }
-                    }
-                }
-            }
-
-            if (edgeToRemoveIdx == -1 || nodeToAddIdx == -1) break; // No possible addition
-
-            int nodeToConnect1 = edges[edgeToRemoveIdx][0];
-            int nodeToConnect2 = edges[edgeToRemoveIdx][1];
-
-            edges.erase(edges.begin() + edgeToRemoveIdx);
-            edges.emplace_back(std::vector<int>{nodeToConnect1, nodeToAddIdx});
-            edges.emplace_back(std::vector<int>{nodeToConnect2, nodeToAddIdx});
-
-            bestSolution.addNode(nodeToAddIdx);
-        }
-
-        if (!edges.empty())
-        {
-            correctOrderNodes.emplace_back(edges[0][0]);
-            while (edges.size() > 1)
-            {
-                bool found = false;
-                for (size_t i = 0; i < edges.size(); )
-                {
-                    if (edges[i][0] == correctOrderNodes.back())
-                    {
-                        correctOrderNodes.emplace_back(edges[i][1]);
-                        edges.erase(edges.begin() + i);
-                        found = true;
-                    }
-                    else if (edges[i][1] == correctOrderNodes.back())
-                    {
-                        correctOrderNodes.emplace_back(edges[i][0]);
-                        edges.erase(edges.begin() + i);
-                        found = true;
-                    }
-                    else
-                    {
-                        ++i;
-                    }
-                    if (found) break;
-                }
-            }
-        }
-    }
-
-    void LocalSearchSolver::runBasic(const std::string& neighborhoodMethod, const std::string& searchMethod)
-    {
-        int currentBestDelta = -1;
-        int bestInterDelta, bestIntraNodesDelta, bestIntraEdgesDelta;
-
-        int arg1, arg2;
-        std::string moveType;
-
-        // Define neighborhood methods
-        typedef void (LocalSearchSolver::*VoidFunctionFourParams)(int&, int&, int&, const std::string&);
-        std::vector<VoidFunctionFourParams> neighborhoodMethods = {
-            &LocalSearchSolver::findBestInterNeighbor,
-            &LocalSearchSolver::findBestIntraNeighborNodes,
-            &LocalSearchSolver::findBestIntraNeighborEdges
-        };
-
-        std::vector<std::string> moveTypes = { "inter", "intra_nodes", "intra_edges" };
-
-        std::vector<int> neighborhoodMethodsIdxs = { 0 };
-
-        int methodIdx = 0;
-        if (neighborhoodMethod == "TWO_NODES")
-        {
-            methodIdx = 1;
-        }
-        if (neighborhoodMethod == "TWO_EDGES")
-        {
-            methodIdx = 2;
-        }
-
-        // Randomly decide to include the methodIdx
-        std::uniform_int_distribution<int> dist(0,1);
-        if (dist(rng) == 1)
-        {
-            neighborhoodMethodsIdxs.push_back(methodIdx);
-        }
-        else
-        {
-            neighborhoodMethodsIdxs.insert(neighborhoodMethodsIdxs.begin(), methodIdx);
-        }
-
-        // Iterate until no improvement
-        while (currentBestDelta < 0)
-        {
-            currentBestDelta = 0;
-
-            for (const auto& i : neighborhoodMethodsIdxs)
-            {
-                int tempBestEval, tempArg1, tempArg2;
-                (this->*neighborhoodMethods[i])(tempBestEval, tempArg1, tempArg2, searchMethod);
-
-                if (tempBestEval < currentBestDelta)
-                {
-                    arg1 = tempArg1;
-                    arg2 = tempArg2;
-                    moveType = moveTypes[i];
-                    currentBestDelta = tempBestEval;
-
-                    if (searchMethod == "GREEDY")
-                    {
-                        break;
-                    }
-                }
-            }
-
-            if (currentBestDelta >= 0)
-            {
-                // No improvement
-                break;
-            }
-
-            bestSolutionEvaluation += currentBestDelta;
-            applyMove(moveType, arg1, arg2);
-        }
-    }
-
-    void LocalSearchSolver::findBestInterNeighbor(int& outDelta, int& exchangedNode, int& newNode, const std::string& searchMethod)
-    {
-        // Finds best neighbor by exchanging some selected node with a not selected node
-        int delta = 0;
-        int minDelta = 0;
-        int minExchangedIdx = -1;
-        int minNewNode = -1;
-
-        if (searchMethod == "GREEDY")
-        {
-            std::shuffle(iterator1.begin(), iterator1.end(), rng);
-            std::shuffle(iteratorLong.begin(), iteratorLong.end(), rng);
-        }
-
-        for (const auto& j : iteratorLong)
-        {
-            if (!bestSolution.contains(j))
-            {
-                for (const auto& i : iterator1)
-                {
-                    delta = bestSolution.calculateDeltaInterRoute(distanceMatrix, costs, i, j);
-                    if (delta < minDelta)
-                    {
-                        minDelta = delta;
-                        minExchangedIdx = i;
-                        minNewNode = j;
-
-                        if (searchMethod == "GREEDY")
-                        {
-                            outDelta = minDelta;
-                            exchangedNode = minExchangedIdx;
-                            newNode = minNewNode;
-                            return;
-                        }
-                    }
+                    break;
                 }
             }
         }
 
-        outDelta = minDelta;
-        exchangedNode = minExchangedIdx;
-        newNode = minNewNode;
+        if (current_best_delta >= 0)
+        {
+            // We don't want to alter the solution
+            // if the new current delta is not less than 0
+            break;
+        }
+        this->best_sol_evaluation += current_best_delta;
+        apply_move(move_type, &arg1, &arg2);
+        // cout << "Move type " << move_type << " Delta " << current_best_delta << endl;
+        // cout << arg1 << " " << arg2 << endl;
+        // cout << this->best_sol_evaluation << endl;
+    }
+    // int eval = best_solution.evaluate(&this->dist_mat, &this->costs);
+    // cout << "Actual evaluation: " << eval << endl;
+    // this->best_solution.print();
+}
+
+void LocalSearchSolver::find_best_intra_neighbor_nodes(int *out_delta, int *first_node_idx, int *second_node_idx, string search_method)
+{
+    int nodes_number = this->best_solution.get_number_of_nodes();
+    int min_delta = 0;
+    int min_node1_idx = -1;
+    int min_node2_idx = -1;
+    int delta;
+
+    if (search_method == "GREEDY")
+    {
+        shuffle(this->iterator1.begin(), this->iterator1.end(), this->rd);
+        shuffle(this->iterator2.begin(), this->iterator2.end(), this->rd);
     }
 
-    void LocalSearchSolver::findBestIntraNeighborNodes(int& outDelta, int& firstNodeIdx, int& secondNodeIdx, const std::string& searchMethod)
+    for (auto &node1_idx : this->iterator1)
     {
-        int minDelta = 0;
-        int minNode1Idx = -1;
-        int minNode2Idx = -1;
-        int delta = 0;
-
-        if (searchMethod == "GREEDY")
+        for (auto &node2_idx : this->iterator2)
         {
-            std::shuffle(iterator1.begin(), iterator1.end(), rng);
-            std::shuffle(iterator2.begin(), iterator2.end(), rng);
-        }
-
-        for (const auto& node1Idx : iterator1)
-        {
-            for (const auto& node2Idx : iterator2)
+            if (node1_idx < node2_idx)
             {
-                if (node1Idx < node2Idx)
+                delta = this->best_solution.calculate_delta_intra_route_nodes(&this->dist_mat,
+                                                                              node1_idx, node2_idx);
+                if (delta < min_delta)
                 {
-                    delta = bestSolution.calculateDeltaIntraRouteNodes(distanceMatrix, node1Idx, node2Idx);
-                    if (delta < minDelta)
-                    {
-                        minDelta = delta;
-                        minNode1Idx = node1Idx;
-                        minNode2Idx = node2Idx;
+                    min_delta = delta;
+                    min_node1_idx = node1_idx;
+                    min_node2_idx = node2_idx;
 
-                        if (searchMethod == "GREEDY")
-                        {
-                            outDelta = minDelta;
-                            firstNodeIdx = minNode1Idx;
-                            secondNodeIdx = minNode2Idx;
-                            return;
-                        }
+                    if (search_method == "GREEDY")
+                    {
+                        *out_delta = min_delta;
+                        *first_node_idx = min_node1_idx;
+                        *second_node_idx = min_node2_idx;
+                        return;
                     }
                 }
             }
         }
+    }
+    *out_delta = min_delta;
+    *first_node_idx = min_node1_idx;
+    *second_node_idx = min_node2_idx;
+}
 
-        outDelta = minDelta;
-        firstNodeIdx = minNode1Idx;
-        secondNodeIdx = minNode2Idx;
+void LocalSearchSolver::find_best_intra_neighbor_edges(int *out_delta, int *first_edge_idx, int *second_edge_idx, string search_method)
+{
+    // We assume edge 0 to connect nodes[0] with nodes[1]
+    // Last edge is between last node and the first node
+    int min_delta = 0;
+    int min_edge1_idx = -1;
+    int min_edge2_idx = -1;
+    int delta;
+
+    if (search_method == "GREEDY")
+    {
+        shuffle(this->iterator1.begin(), this->iterator1.end(), this->rd);
+        shuffle(this->iterator2.begin(), this->iterator2.end(), this->rd);
     }
 
-    void LocalSearchSolver::findBestIntraNeighborEdges(int& outDelta, int& firstEdgeIdx, int& secondEdgeIdx, const std::string& searchMethod)
+    for (auto &edge1_idx : this->iterator1)
     {
-        int minDelta = 0;
-        int minEdge1Idx = -1;
-        int minEdge2Idx = -1;
-        int delta = 0;
-
-        if (searchMethod == "GREEDY")
+        for (auto &edge2_idx : this->iterator2)
         {
-            std::shuffle(iterator1.begin(), iterator1.end(), rng);
-            std::shuffle(iterator2.begin(), iterator2.end(), rng);
-        }
-
-        for (const auto& edge1Idx : iterator1)
-        {
-            for (const auto& edge2Idx : iterator2)
+            if (abs(edge1_idx - edge2_idx) > 1)
             {
-                if (std::abs(edge1Idx - edge2Idx) > 1)
+                delta = this->best_solution.calculate_delta_intra_route_edges(&this->dist_mat,
+                                                                              edge1_idx, edge2_idx);
+                if (delta < min_delta)
                 {
-                    delta = bestSolution.calculateDeltaIntraRouteEdges(distanceMatrix, edge1Idx, edge2Idx);
-                    if (delta < minDelta)
-                    {
-                        minDelta = delta;
-                        minEdge1Idx = edge1Idx;
-                        minEdge2Idx = edge2Idx;
+                    min_delta = delta;
+                    min_edge1_idx = edge1_idx;
+                    min_edge2_idx = edge2_idx;
 
-                        if (searchMethod == "GREEDY")
-                        {
-                            outDelta = minDelta;
-                            firstEdgeIdx = minEdge1Idx;
-                            secondEdgeIdx = minEdge2Idx;
-                            return;
-                        }
+                    if (search_method == "GREEDY")
+                    {
+                        *out_delta = min_delta;
+                        *first_edge_idx = min_edge1_idx;
+                        *second_edge_idx = min_edge2_idx;
+                        return;
+                    }
+                }
+            }
+        }
+    }
+    *out_delta = min_delta;
+    *first_edge_idx = min_edge1_idx;
+    *second_edge_idx = min_edge2_idx;
+}
+
+void LocalSearchSolver::find_best_inter_neighbor(int *out_delta, int *exchanged_node, int *new_node, string search_method)
+{
+    // Finds best neighbor by exchanging some selected node
+    // with a not selected node
+    int delta;
+    int min_delta = 0;
+    int min_exchanged_idx = -1;
+    int min_new_node = -1;
+
+    // random order on indexes for greedy?
+    if (search_method == "GREEDY")
+    {
+        shuffle(this->iterator1.begin(), this->iterator1.end(), this->rd);
+        shuffle(this->iterator_long.begin(), this->iterator_long.end(), this->rd);
+    }
+    for (auto &j : iterator_long)
+    {
+        if (!this->best_solution.contains(j))
+        {
+            for (auto &i : iterator1)
+            {
+                delta = this->best_solution.calculate_delta_inter_route(&this->dist_mat,
+                                                                        &this->costs, i, j);
+
+                if (delta < min_delta)
+                {
+                    // The neighbor solution is better
+                    min_delta = delta;
+                    min_exchanged_idx = i;
+                    min_new_node = j;
+
+                    if (search_method == "GREEDY")
+                    {
+                        *out_delta = min_delta;
+                        *exchanged_node = min_exchanged_idx;
+                        *new_node = min_new_node;
+                        return;
+                    }
+                }
+            }
+        }
+    }
+    *out_delta = min_delta;
+    *exchanged_node = min_exchanged_idx;
+    *new_node = min_new_node;
+}
+
+void LocalSearchSolver::apply_move(string move_type, int *arg1, int *arg2)
+{
+
+    if (move_type == "inter")
+    {
+        this->best_solution.exchange_node_at_idx(*arg1, *arg2);
+    }
+    else if (move_type == "intra_nodes")
+    {
+        this->best_solution.exchange_2_nodes(*arg1, *arg2);
+    }
+    else if (move_type == "intra_edges")
+    {
+        this->best_solution.exchange_2_edges(*arg1, *arg2);
+    }
+}
+void LocalSearchSolver::perturb_best_solution(int n)
+{
+    for (int i = 0; i < n; ++i)
+    {
+        int edge1 = 0;
+        int edge2 = 0;
+        while (abs(edge1 - edge2) < 2)
+        {
+            edge1 = rand() % 100;
+            edge2 = rand() % 100;
+
+            if (edge1 > edge2)
+            {
+                swap(edge1, edge2);
+            }
+        }
+        int delta = this->best_solution.calculate_delta_intra_route_edges(&this->dist_mat,
+                                                                          edge1, edge2);
+        this->best_sol_evaluation += delta;
+        this->best_solution.exchange_2_edges(edge1, edge2);
+    }
+}
+
+void LocalSearchSolver::destroy_and_repair_best_solution()
+{
+    // destroy
+
+    int destroy_sequences_amount = (rand() % 4) + 2;
+    int length = this->best_solution.get_number_of_nodes() / (4 * destroy_sequences_amount);
+
+    for (int idx = 0; idx < destroy_sequences_amount; idx++)
+    {
+        int index_f = rand() % (this->best_solution.get_number_of_nodes() - length + 1);
+        this->best_solution.remove_nodes(index_f, length);
+        // cout<<index_f<<endl;
+        // this->best_solution.print();
+    }
+    // repair
+    vector<int> tmp_sol;
+    this->greedy_cycle_repair(&tmp_sol);
+
+    this->best_solution.set_nodes(tmp_sol);
+    this->best_solution.update_selected();
+    this->best_sol_evaluation = this->best_solution.evaluate(&this->dist_mat, &this->costs);
+}
+
+void LocalSearchSolver::destroy_and_repair_best_solution_v2()
+{
+    // destroy
+    int destroy_sequences_amount = (rand() % 3) + 2;
+    int length = this->best_solution.get_number_of_nodes() / (4 * destroy_sequences_amount);
+
+    for (int idx = 0; idx < destroy_sequences_amount; idx++)
+    {
+        int index_f = rand() % (this->best_solution.get_number_of_nodes() - length + 1);
+        this->best_solution.remove_nodes(index_f, length);
+        // cout<<index_f<<endl;
+        // this->best_solution.print();
+    }
+    // repair
+    vector<int> tmp_sol;
+    this->greedy_cycle_repair(&tmp_sol);
+
+    this->best_solution.set_nodes(tmp_sol);
+    this->best_solution.update_selected();
+    this->best_sol_evaluation = this->best_solution.evaluate(&this->dist_mat, &this->costs);
+}
+
+void LocalSearchSolver::greedy_cycle_repair(vector<int> *correct_order_nodes)
+{
+
+    vector<vector<int>> edges;
+    vector<int> nodes = this->best_solution.get_nodes();
+    for (int idx = 0; idx < this->best_solution.get_number_of_nodes() - 1; idx++)
+    {
+        edges.push_back(vector<int>{nodes[idx], nodes[idx + 1]});
+    }
+    edges.push_back(vector<int>{nodes[this->best_solution.get_number_of_nodes() - 1], nodes[0]});
+
+    while (this->best_solution.get_number_of_nodes() < n_nodes)
+    {
+        int node_to_add_idx = -1;
+        int edge_to_remove_idx = -1;
+        int min_total_cost = numeric_limits<int>::max();
+
+        for (int node_idx = 0; node_idx < this->dist_mat.size(); node_idx++)
+        {
+
+            if (!this->best_solution.contains(node_idx))
+            {
+
+                for (int edge_idx = 0; edge_idx < edges.size(); edge_idx++)
+                {
+
+                    int node1 = edges[edge_idx][0];
+                    int node2 = edges[edge_idx][1];
+
+                    int total_cost = this->dist_mat[node1][node_idx] +
+                                     this->dist_mat[node2][node_idx] -
+                                     this->dist_mat[node1][node2] + this->costs[node_idx];
+
+                    if (total_cost < min_total_cost)
+                    {
+
+                        min_total_cost = total_cost;
+                        edge_to_remove_idx = edge_idx;
+                        node_to_add_idx = node_idx;
                     }
                 }
             }
         }
 
-        outDelta = minDelta;
-        firstEdgeIdx = minEdge1Idx;
-        secondEdgeIdx = minEdge2Idx;
+        int node_to_connect_1 = edges[edge_to_remove_idx][0];
+        int node_to_connect_2 = edges[edge_to_remove_idx][1];
+
+        edges.erase(edges.begin() + edge_to_remove_idx);
+        edges.push_back(vector<int>{node_to_connect_1, node_to_add_idx});
+        edges.push_back(vector<int>{node_to_connect_2, node_to_add_idx});
+
+        this->best_solution.add_node(node_to_add_idx);
     }
 
-    void LocalSearchSolver::applyMove(const std::string& moveType, int arg1, int arg2)
+    (*correct_order_nodes).push_back(edges[0][0]);
+    while (edges.size() > 1)
     {
-        if (moveType == "inter")
+        for (int i = 0; i < edges.size(); i++)
         {
-            bestSolution.exchangeNodeAtIndex(arg1, arg2);
-        }
-        else if (moveType == "intra_nodes")
-        {
-            bestSolution.exchangeTwoNodes(arg1, arg2);
-        }
-        else if (moveType == "intra_edges")
-        {
-            bestSolution.exchangeTwoEdges(arg1, arg2);
+            if (edges[i][0] == (*correct_order_nodes).back())
+            {
+                (*correct_order_nodes).push_back(edges[i][1]);
+                edges.erase(edges.begin() + i);
+                // continue;
+            }
+            else if (edges[i][1] == (*correct_order_nodes).back())
+            {
+                (*correct_order_nodes).push_back(edges[i][0]);
+                edges.erase(edges.begin() + i);
+                // continue;
+            }
         }
     }
+}
 
+void LocalSearchSolver::write_best_to_csv(string filename)
+{
+    this->best_solution.write_to_csv(filename);
+}
+
+int LocalSearchSolver::get_best_solution_eval()
+{
+    return this->best_sol_evaluation;
+}
+vector<int> LocalSearchSolver::get_best_solution()
+{
+    return this->best_solution.get_nodes();
+}
+Solution LocalSearchSolver::get_best_full_solution()
+{
+    return this->best_solution;
+}
+Solution *LocalSearchSolver::get_best_solution_addr()
+{
+    return &this->best_solution;
+}
+
+void LocalSearchSolver::reset()
+{
+    // Set new random solution
+    RandomSolution new_initial_solution = RandomSolution();
+    new_initial_solution.generate(200, 100);
+    this->best_solution= new_initial_solution;
+    this->best_solution.set_nodes(new_initial_solution.get_nodes());
+    this->best_solution.set_selected(new_initial_solution.get_selected());
+
+    this->best_sol_evaluation = this->best_solution.evaluate(&this->dist_mat, &this->costs);
 }

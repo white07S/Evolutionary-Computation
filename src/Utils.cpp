@@ -1,67 +1,75 @@
-#include "Utils.h"
-
 #include <fstream>
 #include <iostream>
 #include <sstream>
-#include <cmath>
-#include <algorithm>
-#include <numeric>
-#include <stdexcept>
+#include <string>
+#include <vector>
+#include <math.h>
+#include <chrono>
 
-namespace LS {
+#include "Utils.h"
+#include "ProblemSolver.h"
+#include "LocalSearchSolver.h"
 
-    void Utils::readCSV(const std::string& filename,
-                        char delimiter,
-                        std::vector<std::vector<std::string>>& rows)
+using namespace std;
+
+void read_csv(string filename,
+              char delimiter,
+              std::vector<std::vector<std::string>> *rows)
+{
+    // Create a file pointer
+    ifstream file;
+
+    // Open csv file
+    file.open(filename);
+
+    if (!file.is_open())
     {
-        std::ifstream file(filename);
-        if (!file.is_open()) {
-            throw std::runtime_error("Could not open the file: " + filename);
-        }
+        throw runtime_error("Could not open the file");
+    }
 
-        std::string line, word;
-        std::vector<std::string> row;
+    // For temporary storage
+    // For contents of a single row
+    vector<string> row;
+    string line, word;
 
-        while (std::getline(file, line))
+    while (file.good())
+    {
+        row.clear();
+
+        // Read one row and store
+        // and store it in line
+        getline(file, line);
+
+        // For breaking words
+        stringstream s(line);
+
+        while (getline(s, word, ';'))
         {
-            row.clear();
-            std::stringstream s(line);
-            while (std::getline(s, word, delimiter))
-            {
-                row.emplace_back(word);
-            }
-            rows.emplace_back(row);
+            // Collect items separated by delimiter
+            row.push_back(word);
         }
-
-        file.close();
+        (*rows).push_back(row);
     }
 
-    double Utils::euclideanDistance(int x1, int y1, int x2, int y2)
-    {
-        return std::sqrt(std::pow(x1 - x2, 2) + std::pow(y1 - y2, 2));
-    }
+    file.close();
+}
 
-    void Utils::writeMatrixToCSV(const std::vector<std::vector<int>>& matrix, const std::string& filename)
-    {
-        std::ofstream myfile(filename);
-        if (!myfile.is_open()) {
-            throw std::runtime_error("Could not open file for writing: " + filename);
-        }
+double euclidean_distance(int x1, int y1, int x2, int y2)
+{
+    double euc_dist;
+    // Calculate Euclidean Distance between (x1, y1) and (x2, y2)
+    euc_dist = sqrt(pow(x1 - x2, 2) + pow(y1 - y2, 2));
 
-        for (const auto& row : matrix)
-        {
-            for (size_t i = 0; i < row.size(); ++i)
-            {
-                myfile << row[i];
-                if (i < row.size() - 1)
-                {
-                    myfile << ",";
-                }
-            }
-            myfile << "\n";
-        }
+    return euc_dist;
+}
 
-        myfile.close();
-    }
+void measure_generation_time(std::string method,
+                             N::ProblemSolver *obj,
+                             void (N::ProblemSolver::*func)(std::string))
+{
 
+    std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
+    (obj->*func)(method);
+    std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
+    std::cout << "Generation time = " << std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count() << "[µs]" << std::endl;
 }

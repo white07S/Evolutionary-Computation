@@ -1,359 +1,378 @@
 #include "Solution.h"
 #include "Utils.h"
-
-#include <algorithm>
-#include <fstream>
 #include <iostream>
+#include <string>
+#include <fstream>
+#include <set>
+#include <algorithm>
+#include <iterator> // for inserter
 
-namespace LS {
+using namespace std;
+using namespace N;
 
-    void Solution::addNode(int node)
+void Solution::add_node(int node)
+{
+    // Add node to solution vector
+    this->nodes.push_back(node);
+    this->selected.insert(node);
+    this->n_nodes += 1;
+}
+void Solution::remove_node(int idx)
+{
+    this->selected.erase(this->nodes[idx]);
+    this->nodes.erase(this->nodes.begin() + idx);
+    this->n_nodes -= 1;
+}
+
+void Solution::remove_nodes(int idx, int amount)
+{
+    for (int i = 0; i < amount; i++)
     {
-        nodes.emplace_back(node);
-        selectedNodes.emplace(node);
-        ++numNodes;
+        this->remove_node(idx);
+    }
+}
+
+bool Solution::contains(int node)
+{
+    return this->selected.contains(node);
+}
+
+void Solution::set_nodes(vector<int> nodes)
+{
+    // Set nodes
+    this->nodes.assign(nodes.begin(), nodes.end());
+    this->n_nodes = nodes.size();
+}
+
+void Solution::update_selected()
+{
+    this->selected.clear();
+    this->selected = set(this->nodes.begin(), this->nodes.end());
+}
+
+vector<int> Solution::get_nodes()
+{
+    return this->nodes;
+}
+
+int Solution::get_number_of_nodes()
+{
+    return this->n_nodes;
+}
+// More robust than get_nodes()
+int Solution::calculate_number_of_nodes()
+{
+    return this->nodes.size();
+}
+
+set<int> Solution::get_selected()
+{
+    return this->selected;
+}
+
+void Solution::set_selected(set<int> new_selected)
+{
+    this->selected = new_selected;
+}
+
+int Solution::get_node_at_idx(int node_idx)
+{
+    return this->nodes[node_idx];
+}
+
+int Solution::get_next_node_idx(int node_idx)
+{
+    return (node_idx + 1) % this->n_nodes;
+}
+
+int Solution::get_prev_node_idx(int node_idx)
+{
+    return (node_idx + this->n_nodes - 1) % this->n_nodes;
+}
+
+int Solution::find_node_idx(int node)
+{
+    auto it = find(this->nodes.begin(), this->nodes.end(), node);
+    if (it != this->nodes.end())
+    {
+        return it - this->nodes.begin();
+    }
+    return -1;
+}
+
+void Solution::exchange_node_at_idx(int node_idx, int new_node)
+{
+    // Update the selected set
+    this->selected.insert(new_node);
+    this->selected.erase(this->nodes[node_idx]);
+
+    this->nodes[node_idx] = new_node;
+}
+
+void Solution::exchange_2_nodes(int node_idx1, int node_idx2)
+{
+    int tmp_node = this->nodes[node_idx1];
+    this->nodes[node_idx1] = this->nodes[node_idx2];
+    this->nodes[node_idx2] = tmp_node;
+}
+
+bool Solution::are_consecutive(int node1_idx, int node2_idx)
+{
+    int node1_next_idx = get_next_node_idx(node1_idx);
+    int node1_prev_idx = get_prev_node_idx(node1_idx);
+    if (node1_next_idx == node2_idx || node1_prev_idx == node2_idx)
+    {
+        return true;
+    }
+    else
+    {
+        return false;
+    }
+}
+
+void Solution::exchange_2_edges(int edge1_idx, int edge2_idx)
+{
+    if (edge2_idx < edge1_idx)
+    {
+        swap(edge1_idx, edge2_idx);
+    }
+    reverse(this->nodes.begin() + edge1_idx + 1, this->nodes.begin() + edge2_idx + 1);
+}
+
+int Solution::evaluate(vector<vector<int>> *dist_mat, vector<int> *costs)
+{
+
+    int temp_node_cost, temp_dist;
+
+    int current = this->nodes[0];
+    // Init total cost as the cost
+    // of the first node
+    int total_cost = (*costs)[current];
+
+    // To track the next node
+    int next;
+
+    for (int i = 1; i < this->n_nodes; i++)
+    {
+        next = this->nodes[i];
+
+        // Add node cost
+        temp_node_cost = (*costs)[next];
+        total_cost += temp_node_cost;
+
+        // Add distance cost
+        temp_dist = (*dist_mat)[current][next];
+        total_cost += temp_dist;
+
+        current = next;
     }
 
-    void Solution::removeNode(int index)
+    total_cost += (*dist_mat)[current][this->nodes[0]];
+
+    return total_cost;
+}
+
+int Solution::calculate_delta_inter_route(vector<vector<int>> *dist_mat, vector<int> *costs,
+                                          int exchanged_idx, int new_node)
+{
+    // Calculate node cost change
+    int delta = (*costs)[new_node] - (*costs)[this->nodes[exchanged_idx]];
+
+    // Calculate distance change
+    int prev_node_idx = this->get_prev_node_idx(exchanged_idx);
+    int next_node_idx = this->get_next_node_idx(exchanged_idx);
+
+    int prev_node = this->nodes[prev_node_idx];
+    int next_node = this->nodes[next_node_idx];
+
+    // Subtract distance to the node to be exchanged
+    this->subtract_distance_from_delta(&delta, dist_mat, prev_node, this->nodes[exchanged_idx]);
+    this->subtract_distance_from_delta(&delta, dist_mat, this->nodes[exchanged_idx], next_node);
+
+    // Add distance to the new node
+    this->add_distance_to_delta(&delta, dist_mat, prev_node, new_node);
+    this->add_distance_to_delta(&delta, dist_mat, new_node, next_node);
+
+    return delta;
+}
+
+int Solution::calculate_delta_intra_route_nodes(vector<std::vector<int>> *dist_mat,
+                                                int first_idx,
+                                                int second_idx)
+{
+    int delta = 0;
+
+    int first_node = this->nodes[first_idx];
+    int second_node = this->nodes[second_idx];
+
+    if (first_node == second_node)
     {
-        if (index < 0 || index >= numNodes) return;
-        selectedNodes.erase(nodes[index]);
-        nodes.erase(nodes.begin() + index);
-        --numNodes;
+        return 0;
     }
 
-    void Solution::removeNodes(int index, int amount)
+    // Get previous and next of the first node
+    int first_prev_node_idx = this->get_prev_node_idx(first_idx);
+    int first_next_node_idx = this->get_next_node_idx(first_idx);
+
+    int first_prev_node = this->nodes[first_prev_node_idx];
+    int first_next_node = this->nodes[first_next_node_idx];
+
+    // Get previous and next of the second node
+    int second_prev_node_idx = this->get_prev_node_idx(second_idx);
+    int second_next_node_idx = this->get_next_node_idx(second_idx);
+
+    int second_prev_node = this->nodes[second_prev_node_idx];
+    int second_next_node = this->nodes[second_next_node_idx];
+
+    if (second_next_node == first_node)
     {
-        for (int i = 0; i < amount; ++i)
+        // Switch first node with second node
+        // if second node preceeds the first one
+        int tmp_node = first_node;
+        first_node = second_node;
+        second_node = tmp_node;
+    }
+
+    // Subtract distances between first-previous and second-next
+    this->subtract_distance_from_delta(&delta, dist_mat, first_prev_node, first_node);
+    this->subtract_distance_from_delta(&delta, dist_mat, second_node, second_next_node);
+
+    // Add distances between firsy-prev - second and first - second-next
+    this->add_distance_to_delta(&delta, dist_mat, first_prev_node, second_node);
+    this->add_distance_to_delta(&delta, dist_mat, first_node, second_next_node);
+
+    if (are_consecutive(first_idx, second_idx))
+    {
+        // This is enough to do for
+        // consecutive nodes
+        return delta;
+    }
+    // Subtract distances between first - first-next and second-prev - second
+    this->subtract_distance_from_delta(&delta, dist_mat, first_node, first_next_node);
+    this->subtract_distance_from_delta(&delta, dist_mat, second_prev_node, second_node);
+
+    // Add distances between second - first-next and first - second-prev
+    this->add_distance_to_delta(&delta, dist_mat, second_node, first_next_node);
+    this->add_distance_to_delta(&delta, dist_mat, first_node, second_prev_node);
+
+    return delta;
+}
+
+int Solution::calculate_delta_inter_route_nodes_candidates(vector<std::vector<int>> *dist_mat,
+                                                           vector<int> *costs,
+                                                           int first_node_idx,
+                                                           int node_to_add,
+                                                           int *removed_idx,
+                                                           string direction)
+{
+    int n_first_node_idx;
+    int n_n_first_node_idx;
+
+    if (direction == "previous")
+    { // get 2 previous indexes
+        n_first_node_idx = this->get_prev_node_idx(first_node_idx);
+        n_n_first_node_idx = this->get_prev_node_idx(n_first_node_idx);
+    }
+    else
+    { // get 2 next indexes
+        n_first_node_idx = this->get_next_node_idx(first_node_idx);
+        n_n_first_node_idx = this->get_next_node_idx(n_first_node_idx);
+    }
+    // Assign index of the node which will be removed
+    *removed_idx = n_first_node_idx;
+
+    int first_node = this->nodes[first_node_idx];
+    // get 2 next/previous nodes
+    int n_first_node = this->nodes[n_first_node_idx];     // closest neighbor
+    int n_n_first_node = this->nodes[n_n_first_node_idx]; // second closest neighbor
+
+    int delta = 0;
+    delta += (*costs)[node_to_add] - (*costs)[n_first_node];
+
+    this->subtract_distance_from_delta(&delta, dist_mat, first_node, n_first_node);
+    this->subtract_distance_from_delta(&delta, dist_mat, n_first_node, n_n_first_node);
+
+    this->add_distance_to_delta(&delta, dist_mat, first_node, node_to_add);
+    this->add_distance_to_delta(&delta, dist_mat, node_to_add, n_n_first_node);
+
+    return delta;
+}
+
+int Solution::calculate_delta_intra_route_edges(std::vector<std::vector<int>> *dist_mat,
+                                                int first_edge_idx, int second_edge_idx)
+{
+    // Get the nodes that are connected by edges
+    int node1edge1 = this->nodes[first_edge_idx];
+    int node2edge1 = this->nodes[get_next_node_idx(first_edge_idx)];
+    int node1edge2 = this->nodes[second_edge_idx];
+    int node2edge2 = this->nodes[get_next_node_idx(second_edge_idx)];
+
+    int delta = 0;
+    // Subtract distances of erased edges
+    delta -= (*dist_mat)[node1edge1][node2edge1];
+    delta -= (*dist_mat)[node1edge2][node2edge2];
+
+    // Add distances of new edges
+    delta += (*dist_mat)[node1edge1][node1edge2];
+    delta += (*dist_mat)[node2edge1][node2edge2];
+
+    return delta;
+}
+
+void Solution::subtract_distance_from_delta(int *delta, vector<vector<int>> *dist_mat,
+                                            int first_node, int second_node)
+{
+    *delta -= (*dist_mat)[first_node][second_node];
+}
+
+void Solution::add_distance_to_delta(int *delta, vector<vector<int>> *dist_mat,
+                                     int first_node, int second_node)
+{
+
+    *delta += (*dist_mat)[first_node][second_node];
+}
+
+void Solution::print()
+{
+
+    for (int i = 0; i < this->nodes.size(); i++)
+    {
+        cout << this->nodes[i] << " ";
+    }
+    cout << endl;
+}
+
+void Solution::write_to_csv(string filename)
+{
+
+    ofstream myfile;
+    myfile.open(filename);
+
+    for (int i = 0; i < this->nodes.size(); i++)
+    {
+        myfile << this->nodes[i] << endl;
+    }
+    myfile.close();
+}
+
+int Solution::most_beneficial_node(vector<int> all_distances, vector<int> all_costs, vector<int> excluded_nodes)
+{
+
+    int min_idx = -1;
+    int min_total_cost = numeric_limits<int>::max();
+
+    for (int i = 0; i < all_distances.size(); i++)
+    {
+        if (!contain(excluded_nodes, i))
         {
-            removeNode(index);
-        }
-    }
 
-    bool Solution::contains(int node) const
-    {
-        return selectedNodes.find(node) != selectedNodes.end();
-    }
-
-    const std::vector<int>& Solution::getNodes() const
-    {
-        return nodes;
-    }
-
-    void Solution::setNodes(const std::vector<int>& newNodes)
-    {
-        nodes = newNodes;
-        numNodes = nodes.size();
-        selectedNodes = std::set<int>(nodes.begin(), nodes.end());
-    }
-
-    int Solution::getNumberOfNodes() const
-    {
-        return numNodes;
-    }
-
-    int Solution::calculateNumberOfNodes() const
-    {
-        return nodes.size();
-    }
-
-    const std::set<int>& Solution::getSelectedNodes() const
-    {
-        return selectedNodes;
-    }
-
-    void Solution::setSelectedNodes(const std::set<int>& newSelected)
-    {
-        selectedNodes = newSelected;
-    }
-
-    void Solution::updateSelectedNodes()
-    {
-        selectedNodes = std::set<int>(nodes.begin(), nodes.end());
-    }
-
-    int Solution::getNodeAtIndex(int index) const
-    {
-        if (index < 0 || index >= numNodes) return -1;
-        return nodes[index];
-    }
-
-    int Solution::getNextNodeIndex(int index) const
-    {
-        if (numNodes == 0) return -1;
-        return (index + 1) % numNodes;
-    }
-
-    int Solution::getPrevNodeIndex(int index) const
-    {
-        if (numNodes == 0) return -1;
-        return (index + numNodes - 1) % numNodes;
-    }
-
-    int Solution::findNodeIndex(int node) const
-    {
-        auto it = std::find(nodes.begin(), nodes.end(), node);
-        if (it != nodes.end()) {
-            return std::distance(nodes.begin(), it);
-        }
-        return -1;
-    }
-
-    void Solution::exchangeNodeAtIndex(int index, int newNode)
-    {
-        if (index < 0 || index >= numNodes) return;
-        selectedNodes.erase(nodes[index]);
-        nodes[index] = newNode;
-        selectedNodes.emplace(newNode);
-    }
-
-    void Solution::exchangeTwoNodes(int index1, int index2)
-    {
-        if (index1 < 0 || index1 >= numNodes || index2 < 0 || index2 >= numNodes) return;
-        std::swap(nodes[index1], nodes[index2]);
-    }
-
-    bool Solution::areConsecutive(int index1, int index2) const
-    {
-        int nextIdx1 = getNextNodeIndex(index1);
-        int prevIdx1 = getPrevNodeIndex(index1);
-        return (nextIdx1 == index2) || (prevIdx1 == index2);
-    }
-
-    void Solution::exchangeTwoEdges(int edgeIndex1, int edgeIndex2)
-    {
-        if (edgeIndex1 < 0 || edgeIndex1 >= numNodes ||
-            edgeIndex2 < 0 || edgeIndex2 >= numNodes)
-            return;
-
-        if (edgeIndex2 < edgeIndex1)
-            std::swap(edgeIndex1, edgeIndex2);
-
-        auto start = nodes.begin() + edgeIndex1 + 1;
-        auto end = nodes.begin() + edgeIndex2 + 1;
-        std::reverse(start, end);
-    }
-
-    int Solution::evaluate(const std::vector<std::vector<int>>& distanceMatrix,
-                          const std::vector<int>& costs) const
-    {
-        if (nodes.empty()) return 0;
-
-        int totalCost = costs[nodes[0]];
-
-        for (size_t i = 1; i < nodes.size(); ++i)
-        {
-            totalCost += costs[nodes[i]];
-            totalCost += distanceMatrix[nodes[i-1]][nodes[i]];
-        }
-
-        // Add distance from last to first node to complete the cycle
-        totalCost += distanceMatrix[nodes.back()][nodes[0]];
-
-        return totalCost;
-    }
-
-    int Solution::mostBeneficialNode(const std::vector<int>& allDistances,
-                                     const std::vector<int>& allCosts,
-                                     const std::vector<int>& excludedNodes) const
-    {
-        int minIdx = -1;
-        int minTotalCost = std::numeric_limits<int>::max();
-
-        for (size_t i = 0; i < allDistances.size(); ++i)
-        {
-            if (!Utils::contains(excludedNodes, static_cast<int>(i)))
+            int tmp_total_cost = all_distances[i] + all_costs[i];
+            if (tmp_total_cost < min_total_cost)
             {
-                int tmpTotalCost = allDistances[i] + allCosts[i];
-                if (tmpTotalCost < minTotalCost)
-                {
-                    minIdx = static_cast<int>(i);
-                    minTotalCost = tmpTotalCost;
-                }
+                min_idx = i;
+                min_total_cost = tmp_total_cost;
             }
         }
-        return minIdx;
     }
-
-    int Solution::calculateDeltaInterRoute(const std::vector<std::vector<int>>& distanceMatrix,
-                                          const std::vector<int>& costs,
-                                          int exchangeIndex, int newNode) const
-    {
-        // Calculate node cost change
-        int delta = costs[newNode] - costs[nodes[exchangeIndex]];
-
-        // Calculate distance change
-        int prevNodeIdx = getPrevNodeIndex(exchangeIndex);
-        int nextNodeIdx = getNextNodeIndex(exchangeIndex);
-
-        int prevNode = nodes[prevNodeIdx];
-        int nextNode = nodes[nextNodeIdx];
-
-        // Subtract distance to the node to be exchanged
-        subtractDistanceFromDelta(delta, distanceMatrix, prevNode, nodes[exchangeIndex]);
-        subtractDistanceFromDelta(delta, distanceMatrix, nodes[exchangeIndex], nextNode);
-
-        // Add distance to the new node
-        addDistanceToDelta(delta, distanceMatrix, prevNode, newNode);
-        addDistanceToDelta(delta, distanceMatrix, newNode, nextNode);
-
-        return delta;
-    }
-
-    int Solution::calculateDeltaIntraRouteNodes(const std::vector<std::vector<int>>& distanceMatrix,
-                                               int firstIndex, int secondIndex) const
-    {
-        int delta = 0;
-
-        int firstNode = nodes[firstIndex];
-        int secondNode = nodes[secondIndex];
-
-        if (firstNode == secondNode)
-            return 0;
-
-        // Get previous and next of the first node
-        int firstPrevIdx = getPrevNodeIndex(firstIndex);
-        int firstNextIdx = getNextNodeIndex(firstIndex);
-
-        int firstPrevNode = nodes[firstPrevIdx];
-        int firstNextNode = nodes[firstNextIdx];
-
-        // Get previous and next of the second node
-        int secondPrevIdx = getPrevNodeIndex(secondIndex);
-        int secondNextIdx = getNextNodeIndex(secondIndex);
-
-        int secondPrevNode = nodes[secondPrevIdx];
-        int secondNextNode = nodes[secondNextIdx];
-
-        if (secondNextNode == firstNode)
-        {
-            // Switch first node with second node
-            // if second node precedes the first one
-            std::swap(firstNode, secondNode);
-        }
-
-        // Subtract distances between first-previous and second-next
-        subtractDistanceFromDelta(delta, distanceMatrix, firstPrevNode, firstNode);
-        subtractDistanceFromDelta(delta, distanceMatrix, secondNode, secondNextNode);
-
-        // Add distances between first-prev - second and first - second-next
-        addDistanceToDelta(delta, distanceMatrix, firstPrevNode, secondNode);
-        addDistanceToDelta(delta, distanceMatrix, firstNode, secondNextNode);
-
-        if (areConsecutive(firstIndex, secondIndex))
-        {
-            // This is enough to do for consecutive nodes
-            return delta;
-        }
-
-        // Subtract distances between first - first-next and second-prev - second
-        subtractDistanceFromDelta(delta, distanceMatrix, firstNode, firstNextNode);
-        subtractDistanceFromDelta(delta, distanceMatrix, secondPrevNode, secondNode);
-
-        // Add distances between second - first-next and first - second-prev
-        addDistanceToDelta(delta, distanceMatrix, secondNode, firstNextNode);
-        addDistanceToDelta(delta, distanceMatrix, firstNode, secondPrevNode);
-
-        return delta;
-    }
-
-    int Solution::calculateDeltaInterRouteNodesCandidates(const std::vector<std::vector<int>>& distanceMatrix,
-                                                          const std::vector<int>& costs,
-                                                          int firstIndex,
-                                                          int candidateNode,
-                                                          int& removedIndex,
-                                                          const std::string& direction) const
-    {
-        int nFirstNodeIdx;
-        int nNFirstNodeIdx;
-
-        if (direction == "previous")
-        {
-            nFirstNodeIdx = getPrevNodeIndex(firstIndex);
-            nNFirstNodeIdx = getPrevNodeIndex(nFirstNodeIdx);
-        }
-        else // "next"
-        {
-            nFirstNodeIdx = getNextNodeIndex(firstIndex);
-            nNFirstNodeIdx = getNextNodeIndex(nFirstNodeIdx);
-        }
-
-        // Assign index of the node which will be removed
-        removedIndex = nFirstNodeIdx;
-
-        int firstNode = nodes[firstIndex];
-        // Get the nodes connected by the edges
-        int nFirstNode = nodes[nFirstNodeIdx];     // closest neighbor
-        int nNFirstNode = nodes[nNFirstNodeIdx]; // second closest neighbor
-
-        int delta = 0;
-        delta += costs[candidateNode] - costs[nFirstNode];
-
-        subtractDistanceFromDelta(delta, distanceMatrix, firstNode, nFirstNode);
-        subtractDistanceFromDelta(delta, distanceMatrix, nFirstNode, nNFirstNode);
-
-        addDistanceToDelta(delta, distanceMatrix, firstNode, candidateNode);
-        addDistanceToDelta(delta, distanceMatrix, candidateNode, nNFirstNode);
-
-        return delta;
-    }
-
-    int Solution::calculateDeltaIntraRouteEdges(const std::vector<std::vector<int>>& distanceMatrix,
-                                               int firstEdgeIndex, int secondEdgeIndex) const
-    {
-        // Get the nodes that are connected by edges
-        int node1Edge1 = nodes[firstEdgeIndex];
-        int node2Edge1 = nodes[getNextNodeIndex(firstEdgeIndex)];
-        int node1Edge2 = nodes[secondEdgeIndex];
-        int node2Edge2 = nodes[getNextNodeIndex(secondEdgeIndex)];
-
-        int delta = 0;
-        // Subtract distances of erased edges
-        delta -= distanceMatrix[node1Edge1][node2Edge1];
-        delta -= distanceMatrix[node1Edge2][node2Edge2];
-
-        // Add distances of new edges
-        delta += distanceMatrix[node1Edge1][node1Edge2];
-        delta += distanceMatrix[node2Edge1][node2Edge2];
-
-        return delta;
-    }
-
-    void Solution::subtractDistanceFromDelta(int& delta, const std::vector<std::vector<int>>& distanceMatrix,
-                                            int firstNode, int secondNode) const
-    {
-        delta -= distanceMatrix[firstNode][secondNode];
-    }
-
-    void Solution::addDistanceToDelta(int& delta, const std::vector<std::vector<int>>& distanceMatrix,
-                                     int firstNode, int secondNode) const
-    {
-        delta += distanceMatrix[firstNode][secondNode];
-    }
-
-    void Solution::print() const
-    {
-        for (const auto& node : nodes)
-        {
-            std::cout << node << " ";
-        }
-        std::cout << std::endl;
-    }
-
-    
-    void Solution::writeToCSV(const std::string& filename) const
-    {
-        std::ofstream myfile(filename);
-        if (!myfile.is_open()) {
-            throw std::runtime_error("Could not open file for writing: " + filename);
-        }
-
-        for (const auto& node : nodes)
-        {
-            myfile << node << "\n";
-        }
-
-        myfile.close();
-    }
-
+    return min_idx;
 }

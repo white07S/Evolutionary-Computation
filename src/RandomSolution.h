@@ -1,15 +1,20 @@
-#ifndef RANDOM_SOLUTION_H
-#define RANDOM_SOLUTION_H
+#include <vector>
 
 #include "Solution.h"
 
-namespace LS {
+#ifndef _RANDOMSOLUTION_H
+#define _RANDOMSOLUTION_H
 
-    class RandomSolution : public Solution {
+namespace N
+{
+
+    class RandomSolution : public Solution
+    {
+
     public:
-        void generate(int totalNodes, int numNodes);
+        void generate(int totoal_nodes, int n_nodes);
     };
 
 }
 
-#endif // RANDOM_SOLUTION_H
+#endif

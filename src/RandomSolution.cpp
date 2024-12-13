@@ -1,33 +1,27 @@
 #include "RandomSolution.h"
-#include "Utils.h"
 
+#include <iostream>
 #include <random>
 #include <set>
-#include <ctime>
-#include <iostream>
 
-namespace LS {
+using namespace std;
+using namespace N;
 
-    void RandomSolution::generate(int totalNodes, int desiredNumNodes)
+void RandomSolution::generate(int total_nodes, int n_nodes)
+{
+    // Tempoary storage to check
+    // if a node was already in the solution
+    set<int> nodes;
+    int node_id;
+
+    while (nodes.size() < n_nodes)
     {
-        // Clear existing nodes and reset
-        nodes.clear();
-        selectedNodes.clear();
-        numNodes = 0;
+        node_id = rand() % total_nodes;
 
-        // Initialize random number generator
-        std::mt19937 rngEngine(static_cast<unsigned int>(std::time(nullptr)));
-        std::uniform_int_distribution<int> dist(0, totalNodes - 1);
-
-        while (nodes.size() < static_cast<size_t>(desiredNumNodes))
+        if (!nodes.count(node_id))
         {
-            int node = dist(rngEngine);
-            // Use the inherited contains method to check if the node is already in the solution
-            if (!contains(node))
-            {
-                addNode(node);
-            }
+            nodes.insert(node_id);
+            this->add_node(node_id);
         }
     }
-
 }

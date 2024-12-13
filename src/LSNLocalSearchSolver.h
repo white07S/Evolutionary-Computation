@@ -1,27 +1,30 @@
-#ifndef LSN_LOCAL_SEARCH_SOLVER_H
-#define LSN_LOCAL_SEARCH_SOLVER_H
+#include <string>
+#include <vector>
 
-#include "LocalSearchSolver.h"
 #include "Solution.h"
-#include "Utils.h"
-namespace LS {
+#include "LocalSearchSolver.h"
 
-    class LSNLocalSearchSolver : public LocalSearchSolver {
+#ifndef _LSNLOCALSEARCH_H
+#define _LSNLOCALSEARCH_H
+
+namespace N
+{
+    class LSNLocalSearchSolver : public LocalSearchSolver
+    {
     private:
-        Solution initialSolution;
-        double fractionNodes;
-        std::string instanceFilename;
-        std::vector<int> iterationCounts;
+        Solution i_solution;
+        double f_nodes;
+        std::string i_filename;
+        std::vector<int> iter_count;
 
     public:
-        LSNLocalSearchSolver(const std::string& instanceFilename, double fractionNodes, const Solution& initialSolution);
-
-        void setBestSolution(const Solution& newBest);
-        double getAverageIterations();
-
-        void run(double timeLimitMicroseconds, bool innerLocalSearch);
+        LSNLocalSearchSolver(std::string instance_filename,
+                             double fraction_nodes,
+                             Solution initial_solution);
+        void set_best_solution(Solution new_best);
+        void run(double time, bool inner_local_search);
+        double get_avg_iter();
     };
 
 }
-
-#endif // LSN_LOCAL_SEARCH_SOLVER_H
+#endif
